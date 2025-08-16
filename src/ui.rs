@@ -99,7 +99,7 @@ impl App {
 
     fn read_object(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let stl_choice = self.object_properties.stl_data.clone();
-        let stl_dir = "E://RustProjects//Sandbox//src//data//stl_models".to_string();
+        let stl_dir = "../data/stl_models".to_string();
 
         let mut stl = self.object_choice(
             ui,
@@ -143,9 +143,9 @@ impl App {
         let normal_choice = self.object_properties.normal_map.clone();
         let uv_choice = self.object_properties.uv.clone();
         
-        let texture_dir = "E://RustProjects//Sandbox//src//data//textures".to_string();
-        let normal_map_dir =  "E://RustProjects//Sandbox//src//data//normal_maps".to_string();
-        let uv_dir = "E://RustProjects//Sandbox//src//data//uv_unwrap".to_string();
+        let texture_dir = "../data/textures".to_string();
+        let normal_map_dir =  "../data/normal_maps".to_string();
+        let uv_dir = "../data/uv_unwrap".to_string();
         
         let mut texture =  self.object_choice(
             ui,

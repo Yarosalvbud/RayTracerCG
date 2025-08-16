@@ -26,16 +26,16 @@ impl Default for Controller {
     fn default() -> Controller {
         let mut meshes = PolygonMeshes::default(); //todo(Убрать!)
 
-        let texture = Texture::new("E://RustProjects//Sandbox//wood.jpg".to_string()).unwrap();
+        let texture = Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg".to_string()).unwrap();
         let ico_texture =
-            Texture::new("E://RustProjects//Sandbox//wall.jpg".to_string())
+            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wall.jpg".to_string())
                 .unwrap();
         let normal_map =
-            Texture::new("E://RustProjects//Sandbox/wood_normals.jpg".to_string()).unwrap();
+            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg".to_string()).unwrap();
         let ico_normal_map =
-            Texture::new("E://RustProjects//Sandbox/wall_normals.jpg".to_string()).unwrap();
-        let mut data = loading_stl_model("E://RustProjects//Sandbox//IcoSphere.stl").unwrap();
-        loading_uv_obj_data(&mut data, "E://RustProjects//Sandbox//Ico.obj");
+            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wall_normals.jpg".to_string()).unwrap();
+        let mut data = loading_stl_model("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/IcoSphere.stl").unwrap();
+        loading_uv_obj_data(&mut data, "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Ico.obj");
         let mut mesh = PolygonMesh::new(
             data,
             vec![169, 169, 169],
@@ -49,8 +49,8 @@ impl Default for Controller {
         mesh.create_tbn();
         meshes.add(mesh);
 
-        let mut data = loading_stl_model("E://RustProjects//Sandbox//Table.stl").unwrap();
-        loading_uv_obj_data(&mut data, "E://RustProjects//Sandbox//Table.obj");
+        let mut data = loading_stl_model("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/Table.stl").unwrap();
+        loading_uv_obj_data(&mut data, "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Table.obj");
         let mut mesh = PolygonMesh::new(
             data,
             vec![169, 169, 169],
