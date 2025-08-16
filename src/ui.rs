@@ -1,18 +1,21 @@
 use crate::controller::Controller;
-use crate::ui::move_commands::{Move, UserMove};
+use crate::ui::camera_command::CameraCommand;
+use crate::ui::errors::UiError;
+use crate::ui::light_commands::LightProperties;
+use crate::ui::move_commands::{Move, ObjectMove};
+use crate::ui::object_light_properties_command::ObjectLightProperties;
 use crate::ui::object_load_commands::{ObjectProperties, list_files_from_dir};
 use crate::ui::select_command::{parse_fov, parse_id};
 use eframe::{Frame, egui};
-use egui::{Color32, ColorImage, Context, Image, TextBuffer, Vec2};
-use std::ops::Deref;
-use crate::ui::errors::UiError;
-use crate::ui::light_commands::LightProperties;
+use egui::{Color32, ColorImage, Context, Image, Slider, Vec2};
 
+mod camera_command;
 pub mod errors;
+mod light_commands;
 mod move_commands;
+mod object_light_properties_command;
 mod object_load_commands;
 mod select_command;
-mod light_commands;
 
 #[derive(Clone, Debug)]
 enum PanelSelection {
@@ -21,24 +24,22 @@ enum PanelSelection {
     LoadObject,
     LoadProperties,
     LightSettings,
+    ObjectLightSettings,
 }
 
 #[derive(Clone, Debug)]
 pub struct App {
     controller: Controller,
     image: ColorImage,
-    rotation_params: UserMove,
-    scale_params: UserMove,
-    translation_params: UserMove,
     show_error: bool,
     error_message: String,
     current_panel: PanelSelection,
     object_properties: ObjectProperties,
+    object_move: ObjectMove,
     selected_object: String,
-    camera_translation: UserMove,
-    camera_rotation: UserMove,
-    camera_fov: String,
+    camera_properties: CameraCommand,
     light_properties: LightProperties,
+    object_light_properties: ObjectLightProperties,
 }
 
 impl Default for App {
@@ -46,18 +47,15 @@ impl Default for App {
         Self {
             controller: Controller::default(),
             image: ColorImage::new([1920, 1080], vec![Color32::WHITE; 1920 * 1080]),
-            rotation_params: UserMove::default(),
-            scale_params: UserMove::default(),
-            translation_params: UserMove::default(),
+            object_move: ObjectMove::default(),
             show_error: false,
             error_message: String::new(),
             current_panel: PanelSelection::ObjectMovement,
             object_properties: ObjectProperties::default(),
             selected_object: String::new(),
-            camera_translation: UserMove::default(),
-            camera_rotation: UserMove::default(),
-            camera_fov: String::new(),
+            camera_properties: CameraCommand::default(),
             light_properties: LightProperties::default(),
+            object_light_properties: ObjectLightProperties::default(),
         }
     }
 }
@@ -87,7 +85,7 @@ impl App {
                     });
             })
         });
-        
+
         ui.separator();
 
         if save_to.trim() != "Не выбрано" {
@@ -101,17 +99,11 @@ impl App {
         let stl_choice = self.object_properties.stl_data.clone();
         let stl_dir = std::env::var("STL_DIR").expect("STL_DIR must be set");
 
-        let mut stl = self.object_choice(
-            ui,
-            &stl_dir,
-            "stl",
-            "Объект",
-            &stl_choice,
-        );
+        let mut stl = self.object_choice(ui, &stl_dir, "stl", "Объект", &stl_choice);
         if let Some(value) = stl.clone() {
             self.object_properties.stl_data = value.clone();
             stl = Some(format!("{}//{}", stl_dir, value))
-        }else{
+        } else {
             self.object_properties.stl_data = "Не выбрано".to_string();
         }
 
@@ -137,63 +129,46 @@ impl App {
         }
         ui.separator();
     }
-    
+
     fn read_object_properties(&mut self, ui: &mut egui::Ui, ctx: &Context) {
-        let texture_choice =  self.object_properties.texture_data.clone();
+        let texture_choice = self.object_properties.texture_data.clone();
         let normal_choice = self.object_properties.normal_map.clone();
         let uv_choice = self.object_properties.uv.clone();
-        
+
         let texture_dir = std::env::var("TEXTURE_DIR").expect("Texture dir must be set");
-        let normal_map_dir= std::env::var("NORMAL_MAPS_DIR").expect("NORMAL_MAPS_DIR must be set");
+        let normal_map_dir = std::env::var("NORMAL_MAPS_DIR").expect("NORMAL_MAPS_DIR must be set");
         let uv_dir = std::env::var("UV_DIR").expect("UV_DIR must be set");
-        
-        let mut texture =  self.object_choice(
-            ui,
-            &texture_dir,
-            "jpg",
-            "Текстура",
-            &texture_choice,
-        );
+
+        let mut texture = self.object_choice(ui, &texture_dir, "jpg", "Текстура", &texture_choice);
 
         if let Some(value) = texture.clone() {
             self.object_properties.texture_data = value.clone();
             texture = Some(format!("{}//{}", texture_dir, value));
-        }else{
+        } else {
             self.object_properties.texture_data = "Не выбрано".to_string();
         }
-        
-        let mut normal = self.object_choice(
-            ui,
-            &normal_map_dir,
-            "jpg",
-            "Карта нормалей",
-            &normal_choice,
-        );
+
+        let mut normal =
+            self.object_choice(ui, &normal_map_dir, "jpg", "Карта нормалей", &normal_choice);
 
         if let Some(value) = normal.clone() {
             self.object_properties.normal_map = value.clone();
             normal = Some(format!("{}//{}", normal_map_dir, value));
-        }else{
+        } else {
             self.object_properties.normal_map = "Не выбрано".to_string();
         }
-        
-        let mut uv = self.object_choice(
-            ui,
-            &uv_dir,
-            "obj",
-            "UV Развертка",
-            &uv_choice,
-        ); 
-        
+
+        let mut uv = self.object_choice(ui, &uv_dir, "obj", "UV Развертка", &uv_choice);
+
         if let Some(value) = uv.clone() {
             self.object_properties.uv = value.clone();
             uv = Some(format!("{}//{}", uv_dir, value));
-        }else{
+        } else {
             self.object_properties.uv = "Не выбрано".to_string();
         }
-        
+
         self.id_input(ui);
-        
+
         let id = parse_id(&self.selected_object);
         if ui
             .add_sized(
@@ -205,10 +180,12 @@ impl App {
             if let Ok(id) = id {
                 if let Some(texture) = texture {
                     if let Some(uv) = uv {
-                        if let Err(message) = self.controller.add_properties(id, texture, normal, uv) {
+                        if let Err(message) =
+                            self.controller.add_properties(id, texture, normal, uv)
+                        {
                             self.error_message = message.to_string();
                             self.show_error = true;
-                        }else{
+                        } else {
                             self.render();
                         }
                     } else {
@@ -221,11 +198,11 @@ impl App {
                 }
             }
         }
-        
+
         if self.show_error {
             self.show_error(ctx)
         }
-        
+
         ui.separator();
     }
 
@@ -237,7 +214,7 @@ impl App {
                 ui.label("Rx:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.rotation_params.dx),
+                    egui::TextEdit::singleline(&mut self.object_move.rotation.dx),
                 );
             });
 
@@ -245,7 +222,7 @@ impl App {
                 ui.label("Ry:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.rotation_params.dy),
+                    egui::TextEdit::singleline(&mut self.object_move.rotation.dy),
                 );
             });
 
@@ -253,7 +230,7 @@ impl App {
                 ui.label("Rz:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.rotation_params.dz),
+                    egui::TextEdit::singleline(&mut self.object_move.rotation.dz),
                 );
             });
         });
@@ -268,7 +245,7 @@ impl App {
                 ui.label("Sx:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.scale_params.dx),
+                    egui::TextEdit::singleline(&mut self.object_move.scale.dx),
                 );
             });
 
@@ -276,7 +253,7 @@ impl App {
                 ui.label("Sy:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.scale_params.dy),
+                    egui::TextEdit::singleline(&mut self.object_move.scale.dy),
                 );
             });
 
@@ -284,7 +261,7 @@ impl App {
                 ui.label("Sz:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.scale_params.dz),
+                    egui::TextEdit::singleline(&mut self.object_move.scale.dz),
                 );
             });
         });
@@ -299,7 +276,7 @@ impl App {
                 ui.label("Dx:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.translation_params.dx),
+                    egui::TextEdit::singleline(&mut self.object_move.translation.dx),
                 );
             });
 
@@ -307,7 +284,7 @@ impl App {
                 ui.label("Dy:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.translation_params.dy),
+                    egui::TextEdit::singleline(&mut self.object_move.translation.dy),
                 );
             });
 
@@ -315,13 +292,13 @@ impl App {
                 ui.label("Dz:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.translation_params.dz),
+                    egui::TextEdit::singleline(&mut self.object_move.translation.dz),
                 );
             });
         });
         ui.separator();
     }
-    
+
     fn camera_move_input(&mut self, ui: &mut egui::Ui) {
         ui.heading("Параметры перемещения камеры");
 
@@ -330,7 +307,7 @@ impl App {
                 ui.label("Dx:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.camera_translation.dx),
+                    egui::TextEdit::singleline(&mut self.camera_properties.translation.dx),
                 );
             });
 
@@ -338,7 +315,7 @@ impl App {
                 ui.label("Dy:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.camera_translation.dy),
+                    egui::TextEdit::singleline(&mut self.camera_properties.translation.dy),
                 );
             });
 
@@ -346,13 +323,13 @@ impl App {
                 ui.label("Dz:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.camera_translation.dz),
+                    egui::TextEdit::singleline(&mut self.camera_properties.translation.dz),
                 );
             });
         });
         ui.separator();
     }
-    
+
     fn camera_rotation_input(&mut self, ui: &mut egui::Ui) {
         ui.heading("Параметры поворота камеры");
 
@@ -361,7 +338,7 @@ impl App {
                 ui.label("Тангаж:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.camera_rotation.dx),
+                    egui::TextEdit::singleline(&mut self.camera_properties.rotation.dx),
                 );
             });
 
@@ -369,19 +346,19 @@ impl App {
                 ui.label("Рыскание:");
                 ui.add_sized(
                     Vec2::new(ui.available_width(), 33.0),
-                    egui::TextEdit::singleline(&mut self.camera_rotation.dy),
+                    egui::TextEdit::singleline(&mut self.camera_properties.rotation.dy),
                 );
             });
         });
         ui.separator();
     }
-    
+
     fn fov_input(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Область видимости:");
             ui.add_sized(
                 Vec2::new(ui.available_width(), 33.0),
-                egui::TextEdit::singleline(&mut self.camera_fov),
+                egui::TextEdit::singleline(&mut self.camera_properties.fov),
             );
         });
     }
@@ -395,7 +372,7 @@ impl App {
             );
         });
     }
-    
+
     fn change_light_intensity(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.vertical(|ui| {
             ui.label("Изменение интенсивности:");
@@ -412,20 +389,22 @@ impl App {
             )
             .clicked()
         {
-            let intensity = self.light_properties.parse_intensity(&self.light_properties.light_intensity);
+            let intensity = self
+                .light_properties
+                .parse_intensity(&self.light_properties.light_intensity);
             if let Err(message) = intensity {
                 self.show_error = true;
                 self.error_message = message.to_string();
-            }else{
+            } else {
                 self.controller.change_light_intensity(intensity.unwrap());
                 self.render();
             }
         }
-        
-        if self.show_error{
+
+        if self.show_error {
             self.show_error(ctx);
         }
-        
+
         ui.separator();
     }
 
@@ -445,23 +424,26 @@ impl App {
             )
             .clicked()
         {
-            let intensity = self.light_properties.parse_intensity(&self.light_properties.backlight_intensity);
+            let intensity = self
+                .light_properties
+                .parse_intensity(&self.light_properties.backlight_intensity);
             if let Err(message) = intensity {
                 self.show_error = true;
                 self.error_message = message.to_string();
-            }else{
-                self.controller.change_light_back_intensity(intensity.unwrap());
+            } else {
+                self.controller
+                    .change_light_back_intensity(intensity.unwrap());
                 self.render();
             }
         }
 
-        if self.show_error{
+        if self.show_error {
             self.show_error(ctx);
         }
 
         ui.separator();
     }
-    
+
     fn change_light_position(&mut self, ui: &mut egui::Ui) {
         ui.heading("Параметры перемещения света");
 
@@ -492,7 +474,7 @@ impl App {
         });
         ui.separator();
     }
-    
+
     fn change_light_const(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.vertical(|ui| {
             ui.label("Изменение фоновой константы:");
@@ -509,17 +491,19 @@ impl App {
             )
             .clicked()
         {
-            let ka = self.light_properties.parse_intensity(&self.light_properties.background_const);
+            let ka = self
+                .light_properties
+                .parse_intensity(&self.light_properties.background_const);
             if let Err(message) = ka {
                 self.show_error = true;
                 self.error_message = message.to_string();
-            }else{
+            } else {
                 self.controller.change_back_const(ka.unwrap());
                 self.render();
             }
         }
 
-        if self.show_error{
+        if self.show_error {
             self.show_error(ctx);
         }
 
@@ -528,9 +512,12 @@ impl App {
 
     fn change_light_color(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-           ui.label("Изменение цвета света:");
+            ui.label("Изменение цвета света:");
 
-            if ui.color_edit_button_srgba(&mut self.light_properties.light_color).changed() {
+            if ui
+                .color_edit_button_srgba(&mut self.light_properties.light_color)
+                .changed()
+            {
                 let light_color = self.light_properties.light_color.clone();
                 let new_color = vec![light_color[0], light_color[1], light_color[2]];
 
@@ -550,9 +537,9 @@ impl App {
             )
             .clicked()
         {
-            let move_data = Move::parse_from_string(&self.translation_params);
-            let scale_data = Move::parse_from_string(&self.scale_params);
-            let rotation_data = Move::parse_from_string(&self.rotation_params);
+            let move_data = Move::parse_from_string(&self.object_move.translation);
+            let scale_data = Move::parse_from_string(&self.object_move.scale);
+            let rotation_data = Move::parse_from_string(&self.object_move.rotation);
             let id = parse_id(&self.selected_object);
 
             if let Err(message) = id {
@@ -560,17 +547,20 @@ impl App {
                 self.show_error = true;
             } else {
                 let id = id.unwrap();
-                
+
                 if move_data.is_err() || scale_data.is_err() || rotation_data.is_err() {
                     let message = UiError::MoveDataFormatError;
                     self.error_message = message.to_string();
                     self.show_error = true;
                 }
-                
-                if !self.show_error{
-                    self.controller.rotate_object(&rotation_data.unwrap().move_data, id);
-                    self.controller.scale_object(&scale_data.unwrap().move_data, id);
-                    self.controller.move_object(&move_data.unwrap().move_data, id);
+
+                if !self.show_error {
+                    self.controller
+                        .rotate_object(&rotation_data.unwrap().move_data, id);
+                    self.controller
+                        .scale_object(&scale_data.unwrap().move_data, id);
+                    self.controller
+                        .move_object(&move_data.unwrap().move_data, id);
 
                     self.render();
                 }
@@ -583,7 +573,7 @@ impl App {
 
         ui.separator();
     }
-    
+
     fn apply_light_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
             .add_sized(
@@ -593,13 +583,13 @@ impl App {
             .clicked()
         {
             let move_data = Move::parse_from_string(&self.light_properties.light_translation);
-            if move_data.is_err(){
+            if move_data.is_err() {
                 let message = UiError::MoveDataFormatError;
                 self.error_message = message.to_string();
                 self.show_error = true;
             }
 
-            if !self.show_error{
+            if !self.show_error {
                 self.controller.move_light(&move_data.unwrap().move_data);
                 self.render();
             }
@@ -611,7 +601,7 @@ impl App {
 
         ui.separator();
     }
-    
+
     fn apply_camera_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
             .add_sized(
@@ -620,19 +610,19 @@ impl App {
             )
             .clicked()
         {
-            let move_data = Move::parse_from_string(&self.camera_translation);
-            let rotation_data = Move::parse_from_string(&self.camera_rotation);
-            
+            let move_data = Move::parse_from_string(&self.camera_properties.translation);
+            let rotation_data = Move::parse_from_string(&self.camera_properties.rotation);
 
-            if move_data.is_err() || rotation_data.is_err(){
+            if move_data.is_err() || rotation_data.is_err() {
                 let message = UiError::MoveDataFormatError;
                 self.error_message = message.to_string();
                 self.show_error = true;
             }
 
-            if !self.show_error{
+            if !self.show_error {
                 self.controller.move_camera(&move_data.unwrap().move_data);
-                self.controller.rotate_camera(&rotation_data.unwrap().move_data);
+                self.controller
+                    .rotate_camera(&rotation_data.unwrap().move_data);
 
                 self.render();
             }
@@ -644,8 +634,8 @@ impl App {
 
         ui.separator();
     }
-    
-    fn change_fov(&mut self, ui: &mut egui::Ui, ctx: &Context){
+
+    fn change_fov(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
             .add_sized(
                 Vec2::new(ui.available_width(), 33.0),
@@ -653,21 +643,84 @@ impl App {
             )
             .clicked()
         {
-            let fov = parse_fov(&self.camera_fov);
-            
+            let fov = parse_fov(&self.camera_properties.fov);
+
             if let Err(message) = fov {
                 self.error_message = message.to_string();
                 self.show_error = true;
-            }else{
+            } else {
                 self.controller.change_fov(fov.unwrap());
                 self.render();
             }
         }
-        
+
         if self.show_error {
             self.show_error(ctx);
         }
-        
+
+        ui.separator();
+    }
+
+    fn change_light_params(&mut self, ui: &mut egui::Ui) {
+        ui.add(Slider::new(&mut self.object_light_properties.kd[0], 0.0..=1.0).text("kd r"));
+        ui.add(Slider::new(&mut self.object_light_properties.kd[1], 0.0..=1.0).text("kd g"));
+        ui.add(Slider::new(&mut self.object_light_properties.kd[2], 0.0..=1.0).text("kd b"));
+
+        ui.add(Slider::new(&mut self.object_light_properties.ks[0], 0.0..=1.0).text("ks r"));
+        ui.add(Slider::new(&mut self.object_light_properties.ks[1], 0.0..=1.0).text("ks g"));
+        ui.add(Slider::new(&mut self.object_light_properties.ks[2], 0.0..=1.0).text("ks b"));
+
+        ui.add(Slider::new(&mut self.object_light_properties.kt[0], 0.0..=1.0).text("kt r"));
+        ui.add(Slider::new(&mut self.object_light_properties.kt[1], 0.0..=1.0).text("kt g"));
+        ui.add(Slider::new(&mut self.object_light_properties.kt[2], 0.0..=1.0).text("kt b"));
+
+        ui.horizontal(|ui| {
+            ui.label("Изменение цвета объекта:");
+            ui.color_edit_button_srgba(&mut self.object_light_properties.object_color);
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Изменение цвета фона");
+            ui.color_edit_button_srgba(&mut self.object_light_properties.background);
+        });
+
+        self.id_input(ui);
+        ui.separator();
+    }
+
+    fn apply_light_properties_change(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Применить преобразования"),
+            )
+            .clicked()
+        {
+            let id = parse_id(&self.selected_object);
+
+            if let Err(message) = id {
+                self.error_message = message.to_string();
+                self.show_error = true;
+            } else {
+                if let Err(message) = self.controller.change_light_properties(
+                    id.unwrap(),
+                    self.object_light_properties.kd,
+                    self.object_light_properties.ks,
+                    self.object_light_properties.kt,
+                    self.object_light_properties.object_color,
+                ) {
+                    self.error_message = message.to_string();
+                    self.show_error = true;
+                }else{
+                    self.render();
+                }
+            }
+        }
+
+        if self.show_error {
+            self.show_error(ctx);
+        }
+
         ui.separator();
     }
 
@@ -682,14 +735,14 @@ impl App {
     }
 
     fn render(&mut self) {
-        self.controller.render(&mut self.image);
+        self.controller.render(&mut self.image, self.object_light_properties.background);
     }
 
     fn show_render(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let texture = ctx.load_texture("render", self.image.clone(), Default::default());
-        ui.add(
-            Image::new(&texture).fit_to_exact_size(Vec2::new(ui.available_width(), ui.available_height())),
-        );
+        let rect = ui.max_rect();
+        let size = rect.size();
+        ui.put(rect, Image::new(&texture).fit_to_exact_size(size));
     }
 
     fn draw_move_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -699,7 +752,7 @@ impl App {
         self.id_input(ui);
         self.apply_move(ui, ctx);
     }
-    
+
     fn draw_camera_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.camera_move_input(ui);
         self.camera_rotation_input(ui);
@@ -707,7 +760,7 @@ impl App {
         self.fov_input(ui);
         self.change_fov(ui, ctx);
     }
-    
+
     fn draw_light_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.change_light_position(ui);
         self.apply_light_move(ui, ctx);
@@ -717,10 +770,15 @@ impl App {
         self.change_light_color(ui);
     }
 
+    fn draw_object_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        self.change_light_params(ui);
+        self.apply_light_properties_change(ui, ctx);
+    }
+
     fn draw_load_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.read_object(ui, ctx);
     }
-    
+
     fn draw_properties_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.read_object_properties(ui, ctx);
     }
@@ -742,9 +800,13 @@ impl eframe::App for App {
                 if ui.button("Загрузка текстур").clicked() {
                     self.current_panel = PanelSelection::LoadProperties;
                 }
-                
+
                 if ui.button("Параметры света").clicked() {
                     self.current_panel = PanelSelection::LightSettings;
+                }
+
+                if ui.button("Параметры объекта").clicked() {
+                    self.current_panel = PanelSelection::ObjectLightSettings;
                 }
             });
         });
@@ -766,9 +828,13 @@ impl eframe::App for App {
                 PanelSelection::LoadProperties => {
                     self.draw_properties_panel(ui, ctx);
                 }
-                
+
                 PanelSelection::LightSettings => {
                     self.draw_light_panel(ui, ctx);
+                }
+
+                PanelSelection::ObjectLightSettings => {
+                    self.draw_object_settings_panel(ui, ctx);
                 }
             });
 

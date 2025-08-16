@@ -28,6 +28,7 @@ impl Ray {
         fov_camera: &FovCamera,
         lights: &Vec<DistantLight>,
         image: &mut ColorImage,
+        bg_color: Vec<u8>,
     ) {
         
         let objects = objects.transform_to_world();
@@ -56,7 +57,7 @@ impl Ray {
                         .normalize();
 
                     let ray = Ray::new(origin, dir_cam);
-                    let (color, _) = ray.cast(&objects, lights, 3, None);
+                    let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone());
 
                     row[x] = Color32::from_rgb(color[0], color[1], color[2]);
                 }
@@ -130,9 +131,9 @@ impl Ray {
         lights: &Vec<DistantLight>,
         max_depth: i32,
         prev_intersection: Option<&RayIntersect>,
+        bg_color: Vec<u8>,
     ) -> (Vec<u8>, bool) {
         let mut color = vec![0, 0, 0];
-        let background_color = vec![0, 0, 0];
         let mut is_hit = false;
 
         if let Some((hit, idx)) = self.ray_intersection(objects) {
@@ -166,7 +167,7 @@ impl Ray {
 
             if self.depth < max_depth {
                 let (reflected_color, reflected_hit) =
-                    Ray::cast(&reflected_ray, objects, lights, max_depth, Some(&hit));
+                    Ray::cast(&reflected_ray, objects, lights, max_depth, Some(&hit), bg_color.clone());
                 if reflected_hit {
                     color[0] += (object.ks[0] * reflected_color[0] as f32) as u8;
                     color[1] += (object.ks[1] * reflected_color[1] as f32) as u8;
@@ -174,7 +175,7 @@ impl Ray {
                 }
 
                 let (refracted_color, refracted_hit) =
-                    Ray::cast(&refracted_ray, objects, lights, max_depth, Some(&hit));
+                    Ray::cast(&refracted_ray, objects, lights, max_depth, Some(&hit), bg_color.clone());
                 if refracted_hit {
                     color[0] += (object.kt[0] * refracted_color[0] as f32) as u8;
                     color[1] += (object.kt[1] * refracted_color[1] as f32) as u8;
@@ -234,6 +235,6 @@ impl Ray {
             return (color, is_hit);
         }
 
-        (background_color, is_hit)
+        (bg_color, is_hit)
     }
 }

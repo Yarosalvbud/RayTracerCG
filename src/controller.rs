@@ -1,3 +1,4 @@
+use eframe::epaint::Color32;
 use crate::camera::FovCamera;
 use crate::light::DistantLight;
 use crate::polygon::file_reader::{loading_stl_model, loading_uv_obj_data};
@@ -135,8 +136,22 @@ impl Controller {
         self.lights[0].color = color.clone();
     }
 
-    pub fn render(&mut self, image: &mut ColorImage) {
-        Ray::render(&self.meshes, &self.fov_camera, &self.lights, image);
+    pub fn render(&mut self, image: &mut ColorImage, bg_color: Color32) {
+        let bg_color = vec![bg_color.r(), bg_color.g(), bg_color.b()];
+        Ray::render(&self.meshes, &self.fov_camera, &self.lights, image, bg_color);
+    }
+    
+    pub fn change_light_properties(&mut self, id: usize, kd: [f32; 3], ks: [f32; 3], kt: [f32; 3], color: Color32) -> Result<(), UiError>{
+        if kd[0] + kt[0] + ks[0] > 1.0 || kd[1] + kt[1] + ks[1] > 1.0 || kd[2] + kt[2] + ks[2] > 1.0 {
+            return Err(UiError::ColorPropertiesError);
+        }
+        
+        self.meshes.meshes[id].kd = vec![kd[0], kd[1], kd[2]];
+        self.meshes.meshes[id].ks = vec![ks[0], ks[1], ks[2]];
+        self.meshes.meshes[id].kt = vec![kt[0], kt[1], ks[2]];
+        self.meshes.meshes[id].color = vec![color.r(), color.g(), color.b()];
+        
+        Ok(())
     }
 
     pub fn add_object(&mut self, object_path: Option<String>) -> Result<(), UiError> {

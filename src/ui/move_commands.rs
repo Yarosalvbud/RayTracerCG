@@ -13,6 +13,23 @@ pub struct UserMove{
     pub dz: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct ObjectMove{
+    pub translation: UserMove,
+    pub rotation: UserMove,
+    pub scale: UserMove,
+}
+
+impl Default for ObjectMove {
+    fn default() -> ObjectMove {
+        ObjectMove{
+           translation: UserMove::default(),
+            rotation: UserMove::default(),
+            scale: UserMove::default(),
+        }
+    }
+}
+
 impl Default for UserMove{
     fn default() -> Self{
         Self{
