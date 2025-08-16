@@ -1,0 +1,16 @@
+[package]
+name = "Sandbox"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror = "2.0.12"
+nalgebra = "0.33.2"
+egui = "0.32.0"
+anyhow = "1.0.98"
+stl_io = "0.8.5"
+rayon = "1.10.0"
+tobj="*"
+eframe = "0.32.0"
+image = "0.25.6"
+
