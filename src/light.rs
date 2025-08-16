@@ -16,7 +16,7 @@ impl Default for DistantLight{
             intensity: 0.8,
             back_intensity: 0.2,
             ka: 0.3,
-            color: vec![255, 180, 100]
+            color: vec![255, 255, 255]
         }
     }
 }

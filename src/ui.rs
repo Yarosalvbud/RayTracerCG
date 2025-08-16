@@ -99,7 +99,7 @@ impl App {
 
     fn read_object(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let stl_choice = self.object_properties.stl_data.clone();
-        let stl_dir = "../data/stl_models".to_string();
+        let stl_dir = std::env::var("STL_DIR").expect("STL_DIR must be set");
 
         let mut stl = self.object_choice(
             ui,
@@ -143,9 +143,9 @@ impl App {
         let normal_choice = self.object_properties.normal_map.clone();
         let uv_choice = self.object_properties.uv.clone();
         
-        let texture_dir = "../data/textures".to_string();
-        let normal_map_dir =  "../data/normal_maps".to_string();
-        let uv_dir = "../data/uv_unwrap".to_string();
+        let texture_dir = std::env::var("TEXTURE_DIR").expect("Texture dir must be set");
+        let normal_map_dir= std::env::var("NORMAL_MAPS_DIR").expect("NORMAL_MAPS_DIR must be set");
+        let uv_dir = std::env::var("UV_DIR").expect("UV_DIR must be set");
         
         let mut texture =  self.object_choice(
             ui,
@@ -159,7 +159,7 @@ impl App {
             self.object_properties.texture_data = value.clone();
             texture = Some(format!("{}//{}", texture_dir, value));
         }else{
-            self.object_properties.texture_data = "Не выбрано".to_string();;
+            self.object_properties.texture_data = "Не выбрано".to_string();
         }
         
         let mut normal = self.object_choice(
@@ -526,6 +526,22 @@ impl App {
         ui.separator();
     }
 
+    fn change_light_color(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+           ui.label("Изменение цвета света:");
+
+            if ui.color_edit_button_srgba(&mut self.light_properties.light_color).changed() {
+                let light_color = self.light_properties.light_color.clone();
+                let new_color = vec![light_color[0], light_color[1], light_color[2]];
+
+                self.controller.change_light_color(&new_color);
+                self.render();
+            }
+        });
+
+        ui.separator();
+    }
+
     fn apply_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
             .add_sized(
@@ -698,6 +714,7 @@ impl App {
         self.change_light_intensity(ui, ctx);
         self.change_light_back_intensity(ui, ctx);
         self.change_light_const(ui, ctx);
+        self.change_light_color(ui);
     }
 
     fn draw_load_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {

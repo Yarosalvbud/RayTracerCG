@@ -2,7 +2,6 @@ use crate::polygon::Polygon;
 use nalgebra::{Point2, Point3, Vector3};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use crate::ui::errors;
 use crate::ui::errors::UiError;
 
 pub struct Reader {
@@ -161,33 +160,33 @@ pub fn loading_uv_obj_data(polygons: &mut Vec<Polygon>, file_name: &str)->Result
     }
     
     let (models, _) = input.unwrap();
-    
-    for model in models.iter() {
-        let mesh = &model.mesh;
+    let mesh = &models[0].mesh;
+
+    let tex_coords = &mesh.texcoords;
+    let tex_coords_indices = &mesh.texcoord_indices;
         
-        if mesh.texcoords.is_empty(){
-            continue;
-        }
+    let mut to_polygons: Vec<Point2<f32>> = Vec::new();
+    let mut polygons_uv: Vec<Vec<Point2<f32>>> = Vec::new();
+    let mut to_polygons_idx = 0;
         
-        let tex_coords = &mesh.texcoords;
-        let tex_coords_indices = &mesh.texcoord_indices;
-        
-        let mut to_polygons: Vec<Point2<f32>> = Vec::new();
-        let mut to_polygons_idx = 0;
-        
-        for idx in tex_coords_indices.iter(){
-            to_polygons.push(Point2::new(tex_coords[2 * *idx as usize], tex_coords[2 * *idx as usize + 1]));
+    for idx in tex_coords_indices.iter(){
+        to_polygons.push(Point2::new(tex_coords[2 * *idx as usize], tex_coords[2 * *idx as usize + 1]));
             
-            if to_polygons.len() == 3{
-                if to_polygons_idx >= polygons.len() { //todo(Правильный индекс)
-                    return Err(UiError::BadUVError);
-                }
-                
-                polygons[to_polygons_idx].uv = to_polygons.clone(); 
-                to_polygons_idx += 1;
-                to_polygons.clear();
+        if to_polygons.len() == 3{
+            if to_polygons_idx >= polygons.len() {
+                return Err(UiError::BadUVError);
             }
+                
+            polygons_uv.push(to_polygons.clone());
+            to_polygons_idx += 1;
+            to_polygons.clear();
         }
+    }
+
+    if polygons_uv.len() != polygons.len(){
+        return Err(UiError::BadUVError);
+    }else {
+        polygons.iter_mut().zip(polygons_uv).for_each(|(poly, uv)| poly.uv = uv);
     }
     
     Ok(())
