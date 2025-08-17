@@ -1,11 +1,8 @@
 use crate::camera::FovCamera;
 use crate::light::DistantLight;
-use crate::polygon::file_reader::{loading_stl_model, loading_uv_obj_data};
-use crate::polygon::polygon_mesh::PolygonMesh;
 use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
 use crate::polygon::polygon_mesh_builder::PolygonMeshBuilder;
 use crate::ray_tracer::Ray;
-use crate::texture::Texture;
 use crate::ui::errors::UiError;
 use eframe::epaint::Color32;
 use egui::ColorImage;
@@ -26,62 +23,41 @@ const DEFAULT_LUMINOSITY: i32 = 50;
 
 impl Default for Controller {
     fn default() -> Controller {
-        let mut meshes = PolygonMeshes::default(); //todo(Убрать!)
+        let mut meshes = PolygonMeshes::default();
+        let mut builder = PolygonMeshBuilder::new();
 
-        let texture = Texture::new(
-            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg"
-                .to_string(),
-        )
-        .unwrap();
-        let ico_texture = Texture::new(
-            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wall.jpg"
-                .to_string(),
-        )
-        .unwrap();
-        let normal_map =
-            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg".to_string()).unwrap();
-        let ico_normal_map =
-            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wall_normals.jpg".to_string()).unwrap();
-        let mut data = loading_stl_model("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/IcoSphere.stl").unwrap();
-        loading_uv_obj_data(
-            &mut data,
-            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Ico.obj",
-        )
-        .expect("Ошибка стартовой сцены");
-        let mut mesh = PolygonMesh::new(
-            data,
+        builder.build_polygons(Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/IcoSphere.stl".to_string())).expect("Ошибка при загрузке стартовой сцены");
+        let mesh = builder.build_object(
             DEFAULT_COLOR.to_vec(),
             DEFAULT_KD.to_vec(),
             DEFAULT_KS.to_vec(),
             DEFAULT_KT.to_vec(),
             DEFAULT_LUMINOSITY,
-            Some(texture),
-            Some(normal_map),
         );
-        mesh.create_tbn();
-        meshes.add(mesh);
 
-        let mut data = loading_stl_model(
-            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/Table.stl",
-        )
-        .unwrap();
-        loading_uv_obj_data(
-            &mut data,
-            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Table.obj",
-        )
-        .expect("Ошибка стартовой сцены");
-        let mut mesh = PolygonMesh::new(
-            data,
+        meshes.add(mesh);
+        meshes
+            .load_uv(
+                0,
+                "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Ico.obj",
+            )
+            .expect("Ошибка при загрузке стартовой сцены");
+        meshes.set_texture(0, Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg".to_string())).expect("Ошибка при загрузке стартовой сцены");
+        meshes.set_normal_map(0, Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg".to_string())).expect("Ошибка при загрузке стартовой сцены");
+
+        builder.build_polygons(Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/Table.stl".to_string())).expect("Ошибка при загрузке стартовой сцены");
+        let mesh = builder.build_object(
             DEFAULT_COLOR.to_vec(),
             DEFAULT_KD.to_vec(),
             DEFAULT_KS.to_vec(),
             DEFAULT_KT.to_vec(),
             DEFAULT_LUMINOSITY,
-            Some(ico_texture),
-            Some(ico_normal_map),
         );
-        mesh.create_tbn();
+
         meshes.add(mesh);
+        meshes.load_uv(1, "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Table.obj").expect("Ошибка при загрузке стартовой сцены");
+        meshes.set_texture(1, Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wall.jpg".to_string())).expect("Ошибка при загрузке стартовой сцены");
+        meshes.set_normal_map(1, Some("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wall_normals.jpg".to_string())).expect("Ошибка при загрузке стартовой сцены");
 
         let mut camera = FovCamera::default();
         camera.translate(&Vector3::new(7.35, -6.92, -4.95));
@@ -99,7 +75,7 @@ impl Default for Controller {
 }
 
 impl Controller {
-    pub fn move_object(&mut self, translation: &Vector3<f32>, id: usize)-> Result<(), UiError> {
+    pub fn move_object(&mut self, translation: &Vector3<f32>, id: usize) -> Result<(), UiError> {
         if id >= self.meshes.meshes.len() {
             return Err(UiError::ObjectNotFoundError);
         }
@@ -125,12 +101,12 @@ impl Controller {
         self.meshes.scale(scale, id);
         Ok(())
     }
-    
+
     pub fn remove_object(&mut self, id: usize) -> Result<(), UiError> {
         if id >= self.meshes.meshes.len() {
             return Err(UiError::ObjectNotFoundError);
         }
-        
+
         self.meshes.remove(id);
         Ok(())
     }
@@ -153,6 +129,16 @@ impl Controller {
 
     pub fn change_light_back_intensity(&mut self, intensity: f32) {
         self.lights[0].change_light_back_intensity(intensity);
+    }
+    
+    pub fn change_object_luminosity(&mut self, id: usize, luminosity: i32)->Result<(),UiError> {
+        if id >= self.meshes.meshes.len() {
+            return Err(UiError::ObjectNotFoundError);
+        }
+        
+        self.meshes.set_luminosity(id, luminosity);
+        
+        Ok(())
     }
 
     pub fn change_back_const(&mut self, ka: f32) {
@@ -229,7 +215,7 @@ impl Controller {
         self.meshes.load_uv(id, &object_uv)?;
         self.meshes.set_texture(id, object_texture)?;
         self.meshes.set_normal_map(id, object_normals)?;
-        
+
         Ok(())
     }
 }

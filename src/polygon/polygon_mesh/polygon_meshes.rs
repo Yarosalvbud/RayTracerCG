@@ -96,4 +96,8 @@ impl PolygonMeshes{
     pub fn load_uv(&mut self, id: usize, uv: &str)->Result<(), UiError>{
         self.meshes[id].load_uv(uv)
     }
+    
+    pub fn set_luminosity(&mut self, id: usize, luminosity: i32){
+        self.meshes[id].set_luminosity(luminosity);
+    }
 }

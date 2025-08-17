@@ -1,10 +1,17 @@
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
+use crate::ui::base_command::camera_commands::{
+    ChangeCameraFovCommand, MoveCameraCommand, RotateCameraCommand,
+};
 use crate::ui::base_command::light_commands::{
     ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommmand,
-    ChangeLightIntensityCommand, MoveLightCommand,
+    ChangeLightIntensityCommand, ChangeLuminosityCommand, MoveLightCommand,
 };
-use crate::ui::base_command::object_commands::{LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand, TexturePropertiesCommand, TranslationCommand};
+use crate::ui::base_command::object_commands::{
+    LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand,
+    TexturePropertiesCommand, TranslationCommand,
+};
+use crate::ui::base_command::render_command::RenderCommand;
 use crate::ui::camera_input::CameraCommand;
 use crate::ui::errors::UiError;
 use crate::ui::light_input::LightProperties;
@@ -14,8 +21,6 @@ use crate::ui::object_load_input::{ObjectProperties, list_files_from_dir};
 use crate::ui::select_input::{parse_fov, parse_id};
 use eframe::{Frame, egui};
 use egui::{Color32, ColorImage, Context, Image, Slider, Vec2};
-use crate::ui::base_command::camera_commands::{ChangeCameraFovCommand, MoveCameraCommand, RotateCameraCommand};
-use crate::ui::base_command::render_command::RenderCommand;
 
 mod base_command;
 mod camera_input;
@@ -372,6 +377,56 @@ impl App {
         });
     }
 
+    fn luminosity_change(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        ui.horizontal(|ui| {
+            ui.label("Коэффициент отражения:");
+            ui.add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::TextEdit::singleline(&mut self.object_light_properties.luminosity),
+            );
+        });
+
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Применить преобразование"),
+            )
+            .clicked()
+        {
+            let id = parse_id(&self.selected_object);
+            let luminosity = self.object_light_properties.parse_luminosity();
+
+            if let Err(message) = id {
+                self.error_message = message.to_string();
+                self.show_error = true;
+            } else {
+                let id = id.unwrap();
+                if let Err(message) = luminosity {
+                    self.error_message = message.to_string();
+                    self.show_error = true;
+                } else {
+                    let luminosity = luminosity.unwrap();
+
+                    let mut change_luminosity_command =
+                        ChangeLuminosityCommand::new(id, luminosity, &mut self.controller);
+
+                    if let Err(message) = change_luminosity_command.execute() {
+                        self.error_message = message.to_string();
+                        self.show_error = true;
+                    }else{
+                        self.render();
+                    }
+                }
+            }
+        }
+
+        if self.show_error {
+            self.show_error(ctx);
+        }
+
+        ui.separator();
+    }
+
     fn id_input(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Номер объекта:");
@@ -578,14 +633,14 @@ impl App {
                         id,
                         &mut self.controller,
                     );
-                    if let Err(message) = rotate.execute(){
+                    if let Err(message) = rotate.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
                     }
 
                     let mut scale =
                         ScaleCommand::new(scale_data.unwrap().move_data, id, &mut self.controller);
-                    if let Err(message) = scale.execute(){
+                    if let Err(message) = scale.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
                     }
@@ -595,7 +650,7 @@ impl App {
                         id,
                         &mut self.controller,
                     );
-                    if let Err(message) = translation.execute(){
+                    if let Err(message) = translation.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
                     }
@@ -660,10 +715,8 @@ impl App {
             }
 
             if !self.show_error {
-                let mut move_camera_command = MoveCameraCommand::new(
-                    move_data.unwrap().move_data,
-                    &mut self.controller,
-                );
+                let mut move_camera_command =
+                    MoveCameraCommand::new(move_data.unwrap().move_data, &mut self.controller);
 
                 move_camera_command.execute().expect("");
 
@@ -699,10 +752,8 @@ impl App {
                 self.error_message = message.to_string();
                 self.show_error = true;
             } else {
-                let mut change_fov_command = ChangeCameraFovCommand::new(
-                    fov.unwrap(),
-                    &mut self.controller,
-                );
+                let mut change_fov_command =
+                    ChangeCameraFovCommand::new(fov.unwrap(), &mut self.controller);
 
                 change_fov_command.execute().expect("");
                 self.render();
@@ -800,16 +851,14 @@ impl App {
             if let Err(message) = id {
                 self.error_message = message.to_string();
                 self.show_error = true;
-            }else{
-                let mut remove_object_command = RemoveObjectCommand::new(
-                    id.unwrap(),
-                    &mut self.controller,
-                );
+            } else {
+                let mut remove_object_command =
+                    RemoveObjectCommand::new(id.unwrap(), &mut self.controller);
 
                 if let Err(message) = remove_object_command.execute() {
                     self.error_message = message.to_string();
                     self.show_error = true;
-                }else{
+                } else {
                     self.render();
                 }
             }
@@ -839,7 +888,9 @@ impl App {
             self.object_light_properties.background,
         );
 
-        render_command.execute().expect("Ошибка при рендере объекта");
+        render_command
+            .execute()
+            .expect("Ошибка при рендере объекта");
     }
 
     fn show_render(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -877,6 +928,7 @@ impl App {
     fn draw_object_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.change_light_params(ui);
         self.apply_light_properties_change(ui, ctx);
+        self.luminosity_change(ui, ctx);
         self.remove_object(ui, ctx);
     }
 

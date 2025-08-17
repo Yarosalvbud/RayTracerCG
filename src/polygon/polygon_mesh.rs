@@ -147,6 +147,10 @@ impl PolygonMesh {
     pub fn set_color(&mut self, color: Vec<u8>) {
         self.color = color;
     }
+    
+    pub fn set_luminosity(&mut self, luminosity: i32) {
+        self.luminosity = luminosity;
+    }
 
     pub fn intersect(&self, ray: &Ray) -> Option<RayIntersect> {
         let mut intersection: Option<RayIntersect> = None;

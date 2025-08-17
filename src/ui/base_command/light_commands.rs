@@ -92,3 +92,21 @@ impl<'a> MoveLightCommand<'a> {
         MoveLightCommand { controller, translation }
     }
 }
+
+pub struct ChangeLuminosityCommand<'a> {
+    id: usize,
+    luminosity: i32,
+    controller: &'a mut Controller,
+}
+
+impl Command for ChangeLuminosityCommand<'_> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.change_object_luminosity(self.id, self.luminosity)
+    }
+}
+
+impl<'a> ChangeLuminosityCommand<'a> {
+    pub fn new(id: usize, luminosity: i32, controller: &'a mut Controller) -> ChangeLuminosityCommand<'a> {
+        ChangeLuminosityCommand { id, luminosity, controller }
+    }
+}
