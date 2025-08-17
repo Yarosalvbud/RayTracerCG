@@ -1,12 +1,13 @@
-use eframe::epaint::Color32;
 use crate::camera::FovCamera;
 use crate::light::DistantLight;
 use crate::polygon::file_reader::{loading_stl_model, loading_uv_obj_data};
 use crate::polygon::polygon_mesh::PolygonMesh;
 use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
+use crate::polygon::polygon_mesh_builder::PolygonMeshBuilder;
 use crate::ray_tracer::Ray;
 use crate::texture::Texture;
 use crate::ui::errors::UiError;
+use eframe::epaint::Color32;
 use egui::ColorImage;
 use nalgebra::Vector3;
 
@@ -27,38 +28,55 @@ impl Default for Controller {
     fn default() -> Controller {
         let mut meshes = PolygonMeshes::default(); //todo(Убрать!)
 
-        let texture = Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg".to_string()).unwrap();
-        let ico_texture =
-            Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wall.jpg".to_string())
-                .unwrap();
+        let texture = Texture::new(
+            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg"
+                .to_string(),
+        )
+        .unwrap();
+        let ico_texture = Texture::new(
+            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wall.jpg"
+                .to_string(),
+        )
+        .unwrap();
         let normal_map =
             Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg".to_string()).unwrap();
         let ico_normal_map =
             Texture::new("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wall_normals.jpg".to_string()).unwrap();
         let mut data = loading_stl_model("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/IcoSphere.stl").unwrap();
-        loading_uv_obj_data(&mut data, "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Ico.obj");
+        loading_uv_obj_data(
+            &mut data,
+            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Ico.obj",
+        )
+        .expect("Ошибка стартовой сцены");
         let mut mesh = PolygonMesh::new(
             data,
-            vec![169, 169, 169],
-            vec![1.0, 1.0, 1.0],
-            vec![0.0, 0.0, 0.0],
-            vec![0.0, 0.0, 0.0],
-            50,
+            DEFAULT_COLOR.to_vec(),
+            DEFAULT_KD.to_vec(),
+            DEFAULT_KS.to_vec(),
+            DEFAULT_KT.to_vec(),
+            DEFAULT_LUMINOSITY,
             Some(texture),
             Some(normal_map),
         );
         mesh.create_tbn();
         meshes.add(mesh);
 
-        let mut data = loading_stl_model("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/Table.stl").unwrap();
-        loading_uv_obj_data(&mut data, "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Table.obj");
+        let mut data = loading_stl_model(
+            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/stl_models/Table.stl",
+        )
+        .unwrap();
+        loading_uv_obj_data(
+            &mut data,
+            "/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/Table.obj",
+        )
+        .expect("Ошибка стартовой сцены");
         let mut mesh = PolygonMesh::new(
             data,
-            vec![169, 169, 169],
-            vec![0.7, 0.7, 0.7],
-            vec![0.3, 0.3, 0.3],
-            vec![0.0, 0.0, 0.0],
-            100,
+            DEFAULT_COLOR.to_vec(),
+            DEFAULT_KD.to_vec(),
+            DEFAULT_KS.to_vec(),
+            DEFAULT_KT.to_vec(),
+            DEFAULT_LUMINOSITY,
             Some(ico_texture),
             Some(ico_normal_map),
         );
@@ -69,7 +87,8 @@ impl Default for Controller {
         camera.translate(&Vector3::new(7.35, -6.92, -4.95));
         camera.rotate(&Vector3::new(-43.0, 120.0, 0.0));
 
-        let light = DistantLight::default();
+        let mut light = DistantLight::default();
+        light.translate(&Vector3::new(4.07, -1.0, 5.9));
 
         Controller {
             meshes,
@@ -80,97 +99,118 @@ impl Default for Controller {
 }
 
 impl Controller {
-    pub fn move_object(&mut self, translation: &Vector3<f32>, id: usize) {
+    pub fn move_object(&mut self, translation: &Vector3<f32>, id: usize)-> Result<(), UiError> {
         if id >= self.meshes.meshes.len() {
-            return;
+            return Err(UiError::ObjectNotFoundError);
         }
 
         self.meshes.translate(translation, id);
+        Ok(())
     }
 
-    pub fn rotate_object(&mut self, rotation: &Vector3<f32>, id: usize) {
+    pub fn rotate_object(&mut self, rotation: &Vector3<f32>, id: usize) -> Result<(), UiError> {
         if id >= self.meshes.meshes.len() {
-            return;
+            return Err(UiError::ObjectNotFoundError);
         }
 
         self.meshes.rotation(rotation, id);
+        Ok(())
     }
 
-    pub fn scale_object(&mut self, scale: &Vector3<f32>, id: usize) {
+    pub fn scale_object(&mut self, scale: &Vector3<f32>, id: usize) -> Result<(), UiError> {
         if id >= self.meshes.meshes.len() {
-            return;
+            return Err(UiError::ObjectNotFoundError);
         }
 
         self.meshes.scale(scale, id);
+        Ok(())
     }
     
+    pub fn remove_object(&mut self, id: usize) -> Result<(), UiError> {
+        if id >= self.meshes.meshes.len() {
+            return Err(UiError::ObjectNotFoundError);
+        }
+        
+        self.meshes.remove(id);
+        Ok(())
+    }
+
     pub fn move_camera(&mut self, translation: &Vector3<f32>) {
         self.fov_camera.translate(translation);
     }
-    
+
     pub fn rotate_camera(&mut self, rotation: &Vector3<f32>) {
         self.fov_camera.rotate(rotation);
     }
-    
+
     pub fn change_fov(&mut self, fov: f32) {
-        self.fov_camera.fov = fov;
+        self.fov_camera.change_fov(fov);
     }
-    
+
     pub fn change_light_intensity(&mut self, light_intensity: f32) {
-        self.lights[0].intensity = light_intensity;
+        self.lights[0].change_light_intensity(light_intensity);
     }
-    
+
     pub fn change_light_back_intensity(&mut self, intensity: f32) {
-        self.lights[0].back_intensity = intensity;
+        self.lights[0].change_light_back_intensity(intensity);
     }
-    
-    pub fn change_back_const(&mut self, ka: f32){
-        self.lights[0].ka = ka;
+
+    pub fn change_back_const(&mut self, ka: f32) {
+        self.lights[0].change_ka(ka);
     }
-    
+
     pub fn move_light(&mut self, translation: &Vector3<f32>) {
         self.lights[0].translate(translation);
     }
-    
+
     pub fn change_light_color(&mut self, color: &Vec<u8>) {
-        self.lights[0].color = color.clone();
+        self.lights[0].change_color(color.clone());
     }
 
     pub fn render(&mut self, image: &mut ColorImage, bg_color: Color32) {
         let bg_color = vec![bg_color.r(), bg_color.g(), bg_color.b()];
-        Ray::render(&self.meshes, &self.fov_camera, &self.lights, image, bg_color);
+        Ray::render(
+            &self.meshes,
+            &self.fov_camera,
+            &self.lights,
+            image,
+            bg_color,
+        );
     }
-    
-    pub fn change_light_properties(&mut self, id: usize, kd: [f32; 3], ks: [f32; 3], kt: [f32; 3], color: Color32) -> Result<(), UiError>{
-        if kd[0] + kt[0] + ks[0] > 1.0 || kd[1] + kt[1] + ks[1] > 1.0 || kd[2] + kt[2] + ks[2] > 1.0 {
+
+    pub fn change_light_properties(
+        &mut self,
+        id: usize,
+        kd: [f32; 3],
+        ks: [f32; 3],
+        kt: [f32; 3],
+        color: Color32,
+    ) -> Result<(), UiError> {
+        if kd[0] + kt[0] + ks[0] > 1.0 || kd[1] + kt[1] + ks[1] > 1.0 || kd[2] + kt[2] + ks[2] > 1.0
+        {
             return Err(UiError::ColorPropertiesError);
         }
 
-        self.meshes.meshes[id].kd = vec![kd[0], kd[1], kd[2]];
-        self.meshes.meshes[id].ks = vec![ks[0], ks[1], ks[2]];
-        self.meshes.meshes[id].kt = vec![kt[0], kt[1], kt[2]];
-        self.meshes.meshes[id].color = vec![color.r(), color.g(), color.b()];
-        
+        self.meshes.set_kd(id, kd.to_vec());
+        self.meshes.set_ks(id, ks.to_vec());
+        self.meshes.set_kt(id, kt.to_vec());
+        self.meshes
+            .set_color(id, vec![color[0], color[1], color[2]]);
+
         Ok(())
     }
 
     pub fn add_object(&mut self, object_path: Option<String>) -> Result<(), UiError> {
-        if let Some(path) = object_path {
-            let data = loading_stl_model(&path)?;
-            let mesh = PolygonMesh::new(
-                data,
-                DEFAULT_COLOR.to_vec(),
-                DEFAULT_KD.to_vec(),
-                DEFAULT_KS.to_vec(),
-                DEFAULT_KT.to_vec(),
-                DEFAULT_LUMINOSITY,
-                None,
-                None,
-            );
-            self.meshes.add(mesh);
-        } else {
-            return Err(UiError::NoPathError);
-        }
+        let mut builder = PolygonMeshBuilder::new();
+        builder.build_polygons(object_path)?;
+        let mesh = builder.build_object(
+            DEFAULT_COLOR.to_vec(),
+            DEFAULT_KD.to_vec(),
+            DEFAULT_KS.to_vec(),
+            DEFAULT_KT.to_vec(),
+            DEFAULT_LUMINOSITY,
+        );
+        self.meshes.add(mesh);
 
         Ok(())
     }
@@ -178,33 +218,17 @@ impl Controller {
     pub fn add_properties(
         &mut self,
         id: usize,
-        object_texture: String,
+        object_texture: Option<String>,
         object_normals: Option<String>,
         object_uv: String,
     ) -> Result<(), UiError> {
-        if id >= self.meshes.meshes.len() {
-            return Err(UiError::ObjectNotFoundError)
-        }
-        
-        let texture = Texture::new(object_texture);
-        if let Err(_) = texture.clone() {
-            return Err(UiError::LoadTextureError);
+        if id >= self.meshes.length() {
+            return Err(UiError::ObjectNotFoundError);
         }
 
-        loading_uv_obj_data(&mut self.meshes.meshes[id].polygons, &object_uv)?;
-        self.meshes.meshes[id].set_texture(Some(texture.unwrap()));
-        
-        if let Some(n) = object_normals {
-            let normals_data = Texture::new(n);
-            if let Err(_) = normals_data {
-                return Err(UiError::LoadNormalsError);
-            } else {
-                self.meshes.meshes[id].set_normal_map(Some(normals_data.unwrap()));
-                self.meshes.meshes[id].create_tbn();
-            }
-        }else{
-            self.meshes.meshes[id].set_normal_map(None);
-        }
+        self.meshes.load_uv(id, &object_uv)?;
+        self.meshes.set_texture(id, object_texture)?;
+        self.meshes.set_normal_map(id, object_normals)?;
         
         Ok(())
     }

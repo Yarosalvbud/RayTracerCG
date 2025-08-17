@@ -58,4 +58,8 @@ impl FovCamera {
             Matrix4::face_towards(&self.origin, &self.target, &self.world_up)
         }
     }
+    
+    pub fn change_fov(&mut self, fov: f32) {
+        self.fov = fov;
+    }
 }

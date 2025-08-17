@@ -1,4 +1,4 @@
-use crate::ui::move_commands::UserMove;
+use crate::ui::move_input::UserMove;
 
 #[derive(Clone, Debug)]
 pub struct CameraCommand {

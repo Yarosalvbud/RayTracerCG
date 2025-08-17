@@ -16,8 +16,6 @@ pub enum UiError{
     NumberNotFoundError,
     #[error("Для того, чтобы применить текстуру к объекту требуется UV развертка")]
     NoUnwrapError,
-    #[error("Не указана текстура")]
-    NoTextureError,
     #[error("Ошибка при загрузке текстуры")]
     LoadTextureError,
     #[error("Ошибка при загрузке карты нормалей")]

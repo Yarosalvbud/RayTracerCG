@@ -1,21 +1,30 @@
 use crate::controller::Controller;
-use crate::ui::camera_command::CameraCommand;
+use crate::ui::base_command::Command;
+use crate::ui::base_command::light_commands::{
+    ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommmand,
+    ChangeLightIntensityCommand, MoveLightCommand,
+};
+use crate::ui::base_command::object_commands::{LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand, TexturePropertiesCommand, TranslationCommand};
+use crate::ui::camera_input::CameraCommand;
 use crate::ui::errors::UiError;
-use crate::ui::light_commands::LightProperties;
-use crate::ui::move_commands::{Move, ObjectMove};
-use crate::ui::object_light_properties_command::ObjectLightProperties;
-use crate::ui::object_load_commands::{ObjectProperties, list_files_from_dir};
-use crate::ui::select_command::{parse_fov, parse_id};
+use crate::ui::light_input::LightProperties;
+use crate::ui::move_input::{Move, ObjectMove};
+use crate::ui::object_light_properties_input::ObjectLightProperties;
+use crate::ui::object_load_input::{ObjectProperties, list_files_from_dir};
+use crate::ui::select_input::{parse_fov, parse_id};
 use eframe::{Frame, egui};
 use egui::{Color32, ColorImage, Context, Image, Slider, Vec2};
+use crate::ui::base_command::camera_commands::{ChangeCameraFovCommand, MoveCameraCommand, RotateCameraCommand};
+use crate::ui::base_command::render_command::RenderCommand;
 
-mod camera_command;
+mod base_command;
+mod camera_input;
 pub mod errors;
-mod light_commands;
-mod move_commands;
-mod object_light_properties_command;
-mod object_load_commands;
-mod select_command;
+mod light_input;
+mod move_input;
+mod object_light_properties_input;
+mod object_load_input;
+mod select_input;
 
 #[derive(Clone, Debug)]
 enum PanelSelection {
@@ -74,7 +83,6 @@ impl App {
 
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                ui.label(label);
                 egui::ComboBox::from_label(label)
                     .selected_text(save_to.clone())
                     .show_ui(ui, |ui| {
@@ -114,7 +122,8 @@ impl App {
             )
             .clicked()
         {
-            let result = self.controller.add_object(stl);
+            let mut load = LoadCommand::new(stl, &mut self.controller);
+            let result = load.execute();
 
             if let Err(err) = result {
                 self.error_message = err.to_string();
@@ -178,27 +187,27 @@ impl App {
             .clicked()
         {
             if let Ok(id) = id {
-                if let Some(texture) = texture {
-                    if let Some(uv) = uv {
-                        if let Err(message) =
-                            self.controller.add_properties(id, texture, normal, uv)
-                        {
-                            self.error_message = message.to_string();
-                            self.show_error = true;
-                        } else {
-                            self.render();
-                        }
-                    } else {
-                        self.error_message = UiError::NoUnwrapError.to_string();
+                if let Some(uv) = uv {
+                    let mut add_properties = TexturePropertiesCommand::new(
+                        id,
+                        &texture,
+                        &normal,
+                        uv,
+                        &mut self.controller,
+                    );
+
+                    if let Err(message) = add_properties.execute() {
+                        self.error_message = message.to_string();
                         self.show_error = true;
+                    } else {
+                        self.render();
                     }
                 } else {
-                    self.error_message = UiError::NoTextureError.to_string();
+                    self.error_message = UiError::NoUnwrapError.to_string();
                     self.show_error = true;
                 }
             }
         }
-
         if self.show_error {
             self.show_error(ctx)
         }
@@ -396,7 +405,10 @@ impl App {
                 self.show_error = true;
                 self.error_message = message.to_string();
             } else {
-                self.controller.change_light_intensity(intensity.unwrap());
+                let mut light_intensity_command =
+                    ChangeLightIntensityCommand::new(intensity.unwrap(), &mut self.controller);
+
+                light_intensity_command.execute().expect("");
                 self.render();
             }
         }
@@ -431,8 +443,9 @@ impl App {
                 self.show_error = true;
                 self.error_message = message.to_string();
             } else {
-                self.controller
-                    .change_light_back_intensity(intensity.unwrap());
+                let mut change_back_light_intensity_command =
+                    ChangeLightBackIntensityCommand::new(intensity.unwrap(), &mut self.controller);
+                change_back_light_intensity_command.execute().expect("");
                 self.render();
             }
         }
@@ -498,7 +511,9 @@ impl App {
                 self.show_error = true;
                 self.error_message = message.to_string();
             } else {
-                self.controller.change_back_const(ka.unwrap());
+                let mut change_ka_command =
+                    ChangeLightConstCommmand::new(ka.unwrap(), &mut self.controller);
+                change_ka_command.execute().expect("");
                 self.render();
             }
         }
@@ -521,7 +536,10 @@ impl App {
                 let light_color = self.light_properties.light_color.clone();
                 let new_color = vec![light_color[0], light_color[1], light_color[2]];
 
-                self.controller.change_light_color(&new_color);
+                let mut color_command =
+                    ChangeLightColorCommand::new(new_color, &mut self.controller);
+
+                color_command.execute();
                 self.render();
             }
         });
@@ -555,12 +573,32 @@ impl App {
                 }
 
                 if !self.show_error {
-                    self.controller
-                        .rotate_object(&rotation_data.unwrap().move_data, id);
-                    self.controller
-                        .scale_object(&scale_data.unwrap().move_data, id);
-                    self.controller
-                        .move_object(&move_data.unwrap().move_data, id);
+                    let mut rotate = RotateCommand::new(
+                        rotation_data.unwrap().move_data,
+                        id,
+                        &mut self.controller,
+                    );
+                    if let Err(message) = rotate.execute(){
+                        self.error_message = message.to_string();
+                        self.show_error = true;
+                    }
+
+                    let mut scale =
+                        ScaleCommand::new(scale_data.unwrap().move_data, id, &mut self.controller);
+                    if let Err(message) = scale.execute(){
+                        self.error_message = message.to_string();
+                        self.show_error = true;
+                    }
+
+                    let mut translation = TranslationCommand::new(
+                        move_data.unwrap().move_data,
+                        id,
+                        &mut self.controller,
+                    );
+                    if let Err(message) = translation.execute(){
+                        self.error_message = message.to_string();
+                        self.show_error = true;
+                    }
 
                     self.render();
                 }
@@ -590,7 +628,9 @@ impl App {
             }
 
             if !self.show_error {
-                self.controller.move_light(&move_data.unwrap().move_data);
+                let mut move_light_command =
+                    MoveLightCommand::new(move_data.unwrap().move_data, &mut self.controller);
+                move_light_command.execute().expect("");
                 self.render();
             }
         }
@@ -620,9 +660,19 @@ impl App {
             }
 
             if !self.show_error {
-                self.controller.move_camera(&move_data.unwrap().move_data);
-                self.controller
-                    .rotate_camera(&rotation_data.unwrap().move_data);
+                let mut move_camera_command = MoveCameraCommand::new(
+                    move_data.unwrap().move_data,
+                    &mut self.controller,
+                );
+
+                move_camera_command.execute().expect("");
+
+                let mut rotate_camera_command = RotateCameraCommand::new(
+                    rotation_data.unwrap().move_data,
+                    &mut self.controller,
+                );
+
+                rotate_camera_command.execute().expect("");
 
                 self.render();
             }
@@ -649,7 +699,12 @@ impl App {
                 self.error_message = message.to_string();
                 self.show_error = true;
             } else {
-                self.controller.change_fov(fov.unwrap());
+                let mut change_fov_command = ChangeCameraFovCommand::new(
+                    fov.unwrap(),
+                    &mut self.controller,
+                );
+
+                change_fov_command.execute().expect("");
                 self.render();
             }
         }
@@ -681,7 +736,12 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.label("Изменение цвета фона");
-            ui.color_edit_button_srgba(&mut self.object_light_properties.background);
+            if ui
+                .color_edit_button_srgba(&mut self.object_light_properties.background)
+                .changed()
+            {
+                self.render();
+            };
         });
 
         self.id_input(ui);
@@ -702,13 +762,51 @@ impl App {
                 self.error_message = message.to_string();
                 self.show_error = true;
             } else {
-                if let Err(message) = self.controller.change_light_properties(
+                let mut change_command = LightPropertiesCommand::new(
                     id.unwrap(),
                     self.object_light_properties.kd,
                     self.object_light_properties.ks,
                     self.object_light_properties.kt,
                     self.object_light_properties.object_color,
-                ) {
+                    &mut self.controller,
+                );
+
+                if let Err(message) = change_command.execute() {
+                    self.error_message = message.to_string();
+                    self.show_error = true;
+                } else {
+                    self.render();
+                }
+            }
+        }
+
+        if self.show_error {
+            self.show_error(ctx);
+        }
+
+        ui.separator();
+    }
+
+    fn remove_object(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Удалить объект"),
+            )
+            .clicked()
+        {
+            let id = parse_id(&self.selected_object);
+
+            if let Err(message) = id {
+                self.error_message = message.to_string();
+                self.show_error = true;
+            }else{
+                let mut remove_object_command = RemoveObjectCommand::new(
+                    id.unwrap(),
+                    &mut self.controller,
+                );
+
+                if let Err(message) = remove_object_command.execute() {
                     self.error_message = message.to_string();
                     self.show_error = true;
                 }else{
@@ -735,14 +833,20 @@ impl App {
     }
 
     fn render(&mut self) {
-        self.controller.render(&mut self.image, self.object_light_properties.background);
+        let mut render_command = RenderCommand::new(
+            &mut self.image,
+            &mut self.controller,
+            self.object_light_properties.background,
+        );
+
+        render_command.execute().expect("Ошибка при рендере объекта");
     }
 
     fn show_render(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let texture = ctx.load_texture("render", self.image.clone(), Default::default());
         let rect = ui.max_rect();
         let size = rect.size();
-        ui.put(rect, Image::new(&texture).fit_to_exact_size(size));
+        ui.add(Image::new(&texture).fit_to_exact_size(size));
     }
 
     fn draw_move_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -773,6 +877,7 @@ impl App {
     fn draw_object_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.change_light_params(ui);
         self.apply_light_properties_change(ui, ctx);
+        self.remove_object(ui, ctx);
     }
 
     fn draw_load_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
