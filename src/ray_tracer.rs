@@ -30,7 +30,7 @@ impl Ray {
         image: &mut ColorImage,
         bg_color: Vec<u8>,
     ) {
-        
+
         let objects = objects.transform_to_world();
         
         let rad_fov = (fov_camera.fov * 0.5).to_radians();
@@ -106,7 +106,7 @@ impl Ray {
     }
 
     fn refracted_ray(l: &Vector3<f32>, n: &Vector3<f32>) -> Vector3<f32> {
-        let nu: f32 = 1.0 / 1.0;
+        let nu: f32 = 1.0;
         let cos_i = -l.dot(&n).min(1.0).max(-1.0);
         if cos_i < 0.0 {
             return Self::refracted_ray(l, &-n);

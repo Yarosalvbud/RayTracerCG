@@ -40,8 +40,8 @@ impl Default for Controller {
         let mut mesh = PolygonMesh::new(
             data,
             vec![169, 169, 169],
-            vec![0.9, 0.9, 0.9],
-            vec![0.1, 0.1, 0.1],
+            vec![1.0, 1.0, 1.0],
+            vec![0.0, 0.0, 0.0],
             vec![0.0, 0.0, 0.0],
             50,
             Some(texture),
@@ -145,10 +145,10 @@ impl Controller {
         if kd[0] + kt[0] + ks[0] > 1.0 || kd[1] + kt[1] + ks[1] > 1.0 || kd[2] + kt[2] + ks[2] > 1.0 {
             return Err(UiError::ColorPropertiesError);
         }
-        
+
         self.meshes.meshes[id].kd = vec![kd[0], kd[1], kd[2]];
         self.meshes.meshes[id].ks = vec![ks[0], ks[1], ks[2]];
-        self.meshes.meshes[id].kt = vec![kt[0], kt[1], ks[2]];
+        self.meshes.meshes[id].kt = vec![kt[0], kt[1], kt[2]];
         self.meshes.meshes[id].color = vec![color.r(), color.g(), color.b()];
         
         Ok(())
