@@ -99,6 +99,27 @@ impl Ray {
         }
     }
 
+    pub fn shadow_ray_intersection(&self, objects: &PolygonMeshes, light: &DistantLight) -> Vec<f32>{
+        let mut shadow_param = vec![1.0, 1.0, 1.0];
+
+        for object in objects.meshes.iter() {
+            if !object.sphere_intersect(self) {
+                continue;
+            }
+
+            let hit = object.intersect(self);
+            if let Some(hit) = hit {
+                if (hit.intersection_point - self.origin).norm() < (light.origin - self.origin).norm() {
+                    shadow_param[0] *= object.kt[0];
+                    shadow_param[1] *= object.kt[1];
+                    shadow_param[2] *= object.kt[2];
+                }
+            }
+        }
+
+        shadow_param
+    }
+
     fn reflected_ray(l: &Vector3<f32>, n: &Vector3<f32>) -> Vector3<f32> {
         let beta = 2.0 * l.dot(&n);
 
@@ -194,31 +215,23 @@ impl Ray {
                     shadow_origin = hit.intersection_point - BIAS * n;
                 }
                 let shadow_ray = Ray::new(shadow_origin, l);
-                let mut shadow_param = 1.0;
-
-                if let Some((hit, _)) = shadow_ray.ray_intersection(objects) {
-                    if (hit.intersection_point - shadow_origin).norm()
-                        < (light.origin - shadow_origin).norm()
-                    {
-                        shadow_param = 0.0;
-                    }
-                }
+                let shadow_param = shadow_ray.shadow_ray_intersection(objects, light);
                 let r = Self::reflected_ray(&l, &n);
                 
-                let diffuse = n.dot(&l).max(0.0) * light.intensity * shadow_param;
+                let diffuse = n.dot(&l).max(0.0) * light.intensity;
                 let specular =
-                    r.dot(&n).max(0.0).powi(object.luminosity) * light.intensity * shadow_param;
+                    r.dot(&n).max(0.0).powi(object.luminosity) * light.intensity;
                 let background = light.ka * light.back_intensity;
 
                 color_r += background * light.color[0] as f32
-                    + (object_color[0] as f32 * object.kd[0] * diffuse
-                        + object.ks[0] * specular * light.color[0] as f32);
+                    + (object_color[0] as f32 * object.kd[0] * diffuse * shadow_param[0]
+                        + object.ks[0] * specular * light.color[0] as f32 * shadow_param[0]);
                 color_g += background * light.color[1] as f32
-                    + (object_color[1] as f32 * object.kd[1] * diffuse
-                        + object.ks[1] * specular * light.color[1] as f32);
+                    + (object_color[1] as f32 * object.kd[1] * diffuse * shadow_param[1]
+                        + object.ks[1] * specular * light.color[1] as f32 * shadow_param[1]);
                 color_b += background * light.color[2] as f32
-                    + (object_color[2] as f32 * object.kd[2] * diffuse
-                        + object.ks[2] * specular * light.color[2] as f32);
+                    + (object_color[2] as f32 * object.kd[2] * diffuse * shadow_param[2]
+                        + object.ks[2] * specular * light.color[2] as f32 * shadow_param[2]);
             }
 
             if let Some(intersection) = prev_intersection {
