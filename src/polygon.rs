@@ -5,7 +5,7 @@ pub mod polygon_mesh_builder;
 use crate::ray_tracer::Ray;
 use crate::texture::Texture;
 use egui::Color32;
-use nalgebra::{Matrix3, Matrix4, Point2, Point3, RowVector3, Vector3};
+use nalgebra::{Matrix3, Matrix4, Point2, Point3, RealField, RowVector3, Vector3};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -94,8 +94,8 @@ impl Polygon {
         self.tbn = Arc::from(rotation * &*self.tbn);
     }
 
-    pub fn color_from_texture(&self, texture: &Texture, point: &Point2<f32>) -> Color32 {
-        texture.sample(point.x, point.y)
+    pub fn color_from_texture(&self, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Color32 {
+        texture.trilinear_interpolation(point.x, point.y, mip_level)
     }
 
     pub fn create_tbn(&mut self) {
@@ -121,8 +121,8 @@ impl Polygon {
         self.tbn = Arc::new(Matrix3::from_rows(&[tangent, bitangent, normal]).transpose());
     }
 
-    pub fn normal_mapping(&self, texture: &Texture, point: &Point2<f32>) -> Vector3<f32> {
-        let normal = texture.sample(point.x, point.y);
+    pub fn normal_mapping(&self, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Vector3<f32> {
+        let normal = texture.trilinear_interpolation(point.x, point.y, mip_level);
         let poly_normal = Vector3::new(
             (normal[0] as f32 / 255.0) * 2.0 - 1.0,
             (normal[1] as f32 / 255.0) * 2.0 - 1.0,
@@ -132,9 +132,60 @@ impl Polygon {
         (self.tbn.as_ref() * poly_normal).normalize()
     }
 
+    pub fn mip_level(&self, ray: &mut Ray, t: f32, texture: &Texture) ->f32{
+        let mut d_o_x = Vector3::zeros();
+        let mut d_o_y = Vector3::zeros();
+
+        if let None = ray.d_o{
+            d_o_x = ray.du.0 * ray.e1 + ray.dv.0 * ray.e2;
+            d_o_y = ray.du.1 * ray.e1 + ray.dv.1 * ray.e2;
+        }
+
+        let e1 = self.vertexes[1] - self.vertexes[0];
+        let e2 = self.vertexes[2] - self.vertexes[0];
+
+        ray.e1 = e1.clone();
+        ray.e2 = e2.clone();
+
+        let k = 1.0 / e1.cross(&e2).dot(&ray.non_norm_direction);
+        let c_u = e2.cross(&ray.non_norm_direction);
+        let c_v = ray.non_norm_direction.cross(&e1);
+
+        let q = d_o_x + t * ray.d_d.0;
+        let r = d_o_y + t * ray.d_d.1;
+
+        let du_dx = k * c_u.dot(&q);
+        let du_dy = k * c_u.dot(&r);
+
+        ray.du.0 = du_dx;
+        ray.du.1 = du_dy;
+
+        let dv_dx = k * c_v.dot(&q);
+        let dv_dy = k * c_v.dot(&r);
+
+        ray.dv.0 = du_dx;
+        ray.dv.1 = du_dy;
+
+        let g1 = self.uv[1] - self.uv[0];
+        let g2 = self.uv[2] - self.uv[0];
+
+        let (w, h) = texture.resolution();
+
+        let ds_dx = w as f32 * (du_dx * g1.x + dv_dx * g2.x);
+        let ds_dy = w as f32 * (du_dy * g1.x + dv_dy * g2.x);
+
+        let dt_dx = h as f32 * (du_dx * g1.y + dv_dx * g2.y);
+        let dt_dy = h as f32 * (du_dy * g1.y + dv_dy * g2.y);
+
+        let ro_first = (ds_dx * ds_dx + dt_dx * dt_dx).sqrt();
+        let ro_second = (ds_dy * ds_dy + dt_dy * dt_dy).sqrt();
+
+        ro_first.max(ro_second).log2().max(0.0)
+    }
+
     pub fn ray_intersect(
         &self,
-        ray: &Ray,
+        ray: &mut Ray,
         texture: &Option<Texture>,
         normal_map: &Option<Texture>,
     ) -> Option<RayIntersect> {
@@ -187,13 +238,15 @@ impl Polygon {
                 self.uv[0].y * u + self.uv[1].y * v + self.uv[2].y * w,
             );
 
+            let mip_level = self.mip_level(ray, t, texture);
+
             if let Some(normal_map) = normal_map {
                 return Some(RayIntersect::new(
                     <Point3<f32>>::from(intersection_point),
                     Point3::new(u, v, w),
                     t,
-                    self.normal_mapping(&normal_map, &point),
-                    Some(self.color_from_texture(&texture, &point)),
+                    self.normal_mapping(&normal_map, &point, mip_level),
+                    Some(self.color_from_texture(&texture, &point, mip_level)),
                 ));
             }
             return Some(RayIntersect::new(
@@ -201,7 +254,7 @@ impl Polygon {
                 Point3::new(u, v, w),
                 t,
                 self.normal.normalize(),
-                Some(self.color_from_texture(&texture, &point)),
+                Some(self.color_from_texture(&texture, &point, mip_level)),
             ));
         }
 

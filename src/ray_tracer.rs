@@ -8,11 +8,37 @@ use rayon::prelude::*;
 
 const BIAS: f32 = 1e-4;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+pub struct Differentials(pub Vector3<f32>, pub Vector3<f32>);
+
+#[derive(Clone, Debug)]
+pub struct IntersectionDifferentials(pub f32, pub f32);
+
+impl Default for Differentials {
+    fn default() -> Self {
+        Differentials(Vector3::zeros(), Vector3::zeros())
+    }
+}
+
+impl Default for IntersectionDifferentials {
+    fn default() -> Self {
+        IntersectionDifferentials(0.0, 0.0)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct Ray {
     pub origin: Point3<f32>,
     pub direction: Vector3<f32>,
     pub depth: i32,
+    pub d_d: Differentials,
+    pub d_o: Option<Differentials>,
+    pub non_norm_direction: Vector3<f32>,
+    pub du: IntersectionDifferentials,
+    pub dv: IntersectionDifferentials,
+    pub e1: Vector3<f32>,
+    pub e2: Vector3<f32>,
 }
 
 impl Ray {
@@ -21,6 +47,13 @@ impl Ray {
             origin,
             direction,
             depth: 1,
+            d_d: Differentials::default(),
+            d_o: None,
+            non_norm_direction: Vector3::zeros(),
+            du: IntersectionDifferentials::default(),
+            dv: IntersectionDifferentials::default(),
+            e1: Vector3::zeros(),
+            e2: Vector3::zeros(),
         }
     }
     pub fn render(
@@ -30,33 +63,47 @@ impl Ray {
         image: &mut ColorImage,
         bg_color: Vec<u8>,
     ) {
-
         let objects = objects.transform_to_world();
-        
+
         let rad_fov = (fov_camera.fov * 0.5).to_radians();
         let scale = f32::tan(rad_fov);
 
         let origin = fov_camera.origin;
         let mut pixels = vec![Color32::default(); image.width() * image.height()];
 
+        let aspect_ratio = image.width() as f32 / image.height() as f32;
+
+        let view = (fov_camera.target - fov_camera.origin).normalize();
+        let right = Vector3::new(0.0, 0.0, 1.0).cross(&view).normalize();
+        let up = view.cross(&right).normalize();
+
+        let view_dir = -view;
+        let right_dir = aspect_ratio * scale * right;
+        let up_dir = -scale * up;
+
         pixels
             .par_chunks_mut(image.width())
             .enumerate()
             .for_each(|(y, row)| {
                 for x in 0..image.width() {
-                    let dx = x as f32 - image.width() as f32 / 2.0;
-                    let dy = image.height() as f32 / 2.0 - y as f32;
-                    let dz = -(image.height() as f32 / 2.0) / scale;
-                    let dir = Vector3::new(dx, dy, dz);
+                    let dir_world = view_dir
+                        + ((2.0 * x as f32 + 1.0) / image.width() as f32 - 1.0) * right_dir
+                        + ((2.0 * y as f32 + 1.0) / image.height() as f32 - 1.0) * up_dir;
 
-                    let dir_cam = (Vector3::from(
-                        (fov_camera.camera_to_world(Some(&Vector3::new(0.0, 0.0, 1.0)))
-                            * dir.to_homogeneous())
-                        .xyz(),
-                    ) - origin.coords)
-                        .normalize();
+                    let r = ((2.0 * aspect_ratio * scale) / image.width() as f32) * right;
+                    let u = -((2.0 * scale) / image.height() as f32) * up;
+                    let dot_product = dir_world.dot(&dir_world);
+                    let dot_product_power = (dot_product * dot_product * dot_product).sqrt();
 
-                    let ray = Ray::new(origin, dir_cam);
+                    let dd_dx = ((dot_product * r) - ((dir_world.dot(&r)) * dir_world)) / dot_product_power;
+                    let dd_dy = ((dot_product * u) - (dir_world.dot(&u) * dir_world)) / dot_product_power;
+
+                    let mut ray = Ray::new(origin, dir_world.normalize());
+                    ray.d_d.0 = dd_dx;
+                    ray.d_d.1 = dd_dy;
+                    ray.non_norm_direction = dir_world;
+                    ray.d_o = Some(Differentials(Vector3::zeros(), Vector3::zeros()));
+
                     let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone());
 
                     row[x] = Color32::from_rgb(color[0], color[1], color[2]);
@@ -70,7 +117,7 @@ impl Ray {
         }
     }
 
-    pub fn ray_intersection(&self, objects: &PolygonMeshes) -> Option<(RayIntersect, usize)> {
+    pub fn ray_intersection(&mut self, objects: &PolygonMeshes) -> Option<(RayIntersect, usize)> {
         let mut t_min = f32::INFINITY;
         let mut intersection_data: Option<RayIntersect> = None;
         let mut object_id: usize = 0;
@@ -99,7 +146,11 @@ impl Ray {
         }
     }
 
-    pub fn shadow_ray_intersection(&self, objects: &PolygonMeshes, light: &DistantLight) -> Vec<f32>{
+    pub fn shadow_ray_intersection(
+        &mut self,
+        objects: &PolygonMeshes,
+        light: &DistantLight,
+    ) -> Vec<f32> {
         let mut shadow_param = vec![1.0, 1.0, 1.0];
 
         for object in objects.meshes.iter() {
@@ -109,7 +160,9 @@ impl Ray {
 
             let hit = object.intersect(self);
             if let Some(hit) = hit {
-                if (hit.intersection_point - self.origin).norm() < (light.origin - self.origin).norm() {
+                if (hit.intersection_point - self.origin).norm()
+                    < (light.origin - self.origin).norm()
+                {
                     shadow_param[0] *= object.kt[0];
                     shadow_param[1] *= object.kt[1];
                     shadow_param[2] *= object.kt[2];
@@ -147,7 +200,7 @@ impl Ray {
     }
 
     pub fn cast(
-        &self,
+        &mut self,
         objects: &PolygonMeshes,
         lights: &Vec<DistantLight>,
         max_depth: i32,
@@ -181,22 +234,36 @@ impl Ray {
             }
 
             let mut reflected_ray = Ray::new(reflected_origin, reflected_dir);
+            reflected_ray.d_o = None;
             let mut refracted_ray = Ray::new(refracted_origin, refracted_dir);
+            refracted_ray.d_o = None;
 
             reflected_ray.depth = self.depth + 1;
             refracted_ray.depth = self.depth + 1;
 
             if self.depth < max_depth {
-                let (reflected_color, reflected_hit) =
-                    Ray::cast(&reflected_ray, objects, lights, max_depth, Some(&hit), bg_color.clone());
+                let (reflected_color, reflected_hit) = Ray::cast(
+                    &mut reflected_ray,
+                    objects,
+                    lights,
+                    max_depth,
+                    Some(&hit),
+                    bg_color.clone(),
+                );
                 if reflected_hit {
                     color[0] += (object.ks[0] * reflected_color[0] as f32) as u8;
                     color[1] += (object.ks[1] * reflected_color[1] as f32) as u8;
                     color[2] += (object.ks[2] * reflected_color[2] as f32) as u8;
                 }
 
-                let (refracted_color, refracted_hit) =
-                    Ray::cast(&refracted_ray, objects, lights, max_depth, Some(&hit), bg_color.clone());
+                let (refracted_color, refracted_hit) = Ray::cast(
+                    &mut refracted_ray,
+                    objects,
+                    lights,
+                    max_depth,
+                    Some(&hit),
+                    bg_color.clone(),
+                );
                 if refracted_hit {
                     color[0] += (object.kt[0] * refracted_color[0] as f32) as u8;
                     color[1] += (object.kt[1] * refracted_color[1] as f32) as u8;
@@ -214,13 +281,12 @@ impl Ray {
                 if l.dot(&n) < 0.0 {
                     shadow_origin = hit.intersection_point - BIAS * n;
                 }
-                let shadow_ray = Ray::new(shadow_origin, l);
+                let mut shadow_ray = Ray::new(shadow_origin, l);
                 let shadow_param = shadow_ray.shadow_ray_intersection(objects, light);
                 let r = Self::reflected_ray(&l, &n);
-                
+
                 let diffuse = n.dot(&l).max(0.0) * light.intensity;
-                let specular =
-                    r.dot(&n).max(0.0).powi(object.luminosity) * light.intensity;
+                let specular = r.dot(&n).max(0.0).powi(object.luminosity) * light.intensity;
                 let background = light.ka * light.back_intensity;
 
                 color_r += background * light.color[0] as f32
@@ -244,7 +310,7 @@ impl Ray {
             color[0] = (color[0] as usize + color_r.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
             color[1] = (color[1] as usize + color_g.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
             color[2] = (color[2] as usize + color_b.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
-            
+
             return (color, is_hit);
         }
 

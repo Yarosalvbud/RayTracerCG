@@ -2,15 +2,30 @@ use std::path::Path;
 use std::sync::Arc;
 use egui::{Color32, ColorImage};
 use image::{ImageBuffer, ImageReader, Rgba};
-use nalgebra::{DMatrix};
+use nalgebra::{DMatrix, Vector3};
+
 
 #[derive(Clone, Debug)]
 pub struct Texture {
     image: Arc<ColorImage>,
+    images: Arc<Vec<ColorImage>>,
 }
 
 impl Texture {
-    pub fn new(path: String) -> Result<Self, String> {
+    pub fn new(path: String, is_normals: bool) -> Result<Self, String> {
+        let image = Self::read_image(&path)?;
+        let mut mip_levels = Vec::new();
+
+        Self::create_mipmaps(&image, &path, &mut mip_levels, is_normals);
+
+        Ok(Self {
+            image: Arc::new(image),
+            images: Arc::new(mip_levels),
+        })
+    }
+
+
+    fn read_image(path: &str) -> Result<ColorImage, String> {
         let img = match ImageReader::open(&path) {
             Ok(reader) => reader.decode(),
             Err(e) => return Err(format!("Невозможно прочитать изображение: {}", e)),
@@ -24,36 +39,51 @@ impl Texture {
         let img_rgba = img.to_rgba8();
 
         let size = [img_rgba.width() as usize, img_rgba.height() as usize];
-        let color_image = ColorImage::from_rgba_unmultiplied(size, &img_rgba);
 
-        Ok(Self {
-            image: Arc::new(color_image),
-        })
+        Ok(ColorImage::from_rgba_unmultiplied(size, &img_rgba))
     }
 
-    pub fn create_mipmaps(image: &ColorImage, path: &str){
+    fn load_mip_maps(dest_dir: &str, file_name: &str, images: &mut Vec<ColorImage>){
+        let mut mip_level = 0;
+        let mut path = format!("{dest_dir}/{file_name}_{mip_level}.png");
+
+        while Path::new(&path).exists() {
+            images.push(Self::read_image(&path).unwrap());
+            mip_level += 1;
+            path = format!("{dest_dir}/{file_name}_{mip_level}.png");
+        }
+    }
+
+    fn create_mipmaps(image: &ColorImage, path: &str, images: &mut Vec<ColorImage>, is_normals: bool) {
         let dest_dir = std::env::var("MIP_MAPS_DIR").expect("Директория для сохранения не найдена");
         let path = Path::new(path);
 
         let file_name = path.file_name().unwrap().to_str().unwrap().split('.').collect::<Vec<&str>>()[0];
-        let mut mip_level = 1;
+        let mut mip_level = 0;
+        if Path::new(&format!("{dest_dir}/{file_name}_{mip_level}.png")).exists() {
+            Self::load_mip_maps(&dest_dir, &file_name, images);
+            return;
+        }
+
         Self::save_color_image(&image, &format!("{dest_dir}/{file_name}_{mip_level}.png")).unwrap();
+        images.push(image.clone());
         mip_level += 1;
 
-        let radius = 3;
-        let kernel = Self::kernel(radius, 1.0);
+        let radius = 2;
+        let kernel = Self::kernel(radius, 0.5);
         let mut buff_image = image.clone();
 
         while buff_image.width() != 1 || buff_image.height() != 1 {
-            let blur_image = Self::image_blur(&buff_image, &kernel, radius);
-            buff_image = Self::image_downsampling(&blur_image);
+            let blur_image = Self::image_blur(&buff_image, &kernel, radius, is_normals);
+            buff_image = Self::image_downsampling(&blur_image, is_normals);
 
             Self::save_color_image(&buff_image, &format!("{dest_dir}/{file_name}_{mip_level}.png")).unwrap();
+            images.push(buff_image.clone());
             mip_level += 1;
         }
     }
 
-    pub fn save_color_image(color_image: &ColorImage, file_path: &str) -> Result<(), image::ImageError> {
+    fn save_color_image(color_image: &ColorImage, file_path: &str) -> Result<(), image::ImageError> {
         let width = color_image.width() as u32;
         let height = color_image.height() as u32;
 
@@ -71,7 +101,71 @@ impl Texture {
         img_buffer.save(file_path)
     }
 
-    pub fn kernel(radius: i32, sigma: f32)->DMatrix<f32>{
+    fn image_downsampling(image: &ColorImage, is_normals: bool) -> ColorImage {
+        let new_width = (image.width() as f32 / 2.0).ceil() as usize;
+        let new_height = (image.height() as f32 / 2.0).ceil() as usize;
+        let mut mip_image = ColorImage::new([new_width, new_height], vec![Color32::BLACK; new_width * new_height]);
+
+        for y in (0..image.height()).step_by(2) {
+            for x in (0..image.width()).step_by(2) {
+                let mut r = 0;
+                let mut g = 0;
+                let mut b = 0;
+                let mut count = 0;
+
+                let mut normals_sum = Vector3::<f32>::new(0.0, 0.0, 0.0);
+
+                for dy in 0..2 {
+                    for dx in 0..2 {
+                        let px = x + dx;
+                        let py = y + dy;
+                        if px < image.width() && py < image.height() {
+                            let color_texture = image[(px, py)];
+
+                            if is_normals {
+                                let n = Vector3::new(
+                                    (color_texture.r() as f32 / 255.0) * 2.0 - 1.0,
+                                    (color_texture.g() as f32 / 255.0) * 2.0 - 1.0,
+                                    (color_texture.b() as f32 / 255.0) * 2.0 - 1.0,
+                                ).normalize();
+                                normals_sum += n;
+                            } else {
+                                r += color_texture.r() as u32;
+                                g += color_texture.g() as u32;
+                                b += color_texture.b() as u32;
+                            }
+
+                            count += 1;
+                        }
+                    }
+                }
+
+                let conv_color = if is_normals {
+                    if count > 0 {
+                        let n_avg = (normals_sum / count as f32).normalize();
+                        let r = ((n_avg.x * 0.5 + 0.5) * 255.0).clamp(0.0, 255.0) as u8;
+                        let g = ((n_avg.y * 0.5 + 0.5) * 255.0).clamp(0.0, 255.0) as u8;
+                        let b = ((n_avg.z * 0.5 + 0.5) * 255.0).clamp(0.0, 255.0) as u8;
+                        Color32::from_rgb(r, g, b)
+                    } else {
+                        Color32::BLACK
+                    }
+                } else {
+                    Color32::from_rgb(
+                        (r / count) as u8,
+                        (g / count) as u8,
+                        (b / count) as u8,
+                    )
+                };
+
+                mip_image[(x / 2, y / 2)] = conv_color;
+            }
+        }
+
+        mip_image
+    }
+
+    fn kernel(radius: i32, sigma: f32)->DMatrix<f32>{
         let kernel_size = (radius * 2) + 1;
         let mut kernel = DMatrix::<f32>::zeros(kernel_size as usize, kernel_size as usize);
 
@@ -94,7 +188,7 @@ impl Texture {
         kernel
     }
 
-    pub fn image_blur(image: &ColorImage, kernel: &DMatrix<f32>, radius: i32) -> ColorImage{
+    fn image_blur(image: &ColorImage, kernel: &DMatrix<f32>, radius: i32, is_normals: bool) -> ColorImage{
         let mut blur_image = ColorImage::new([image.width(), image.height()], vec![Color32::BLACK; image.width() * image.height()]);
 
         for i in 0..image.width(){
@@ -113,55 +207,33 @@ impl Texture {
 
                         if x_image >= 0 && x_image < image.width() as i32 && y_image >= 0 && y_image < image.height() as i32 {
                             let image_color = image[(x_image as usize, y_image as usize)];
-                            r += image_color[0] as f32 * kernel_item;
-                            g += image_color[1] as f32 * kernel_item;
-                            b += image_color[2] as f32 * kernel_item;
+                            let mut color = Vector3::new(image_color[0] as f32, image_color[1] as f32, image_color[2] as f32);
+                            if is_normals{
+                                color = Vector3::new((color[0] / 255.0) * 2.0 - 1.0,
+                                             (color[1] / 255.0) * 2.0 - 1.0,
+                                             (color[2] / 255.0) * 2.0 - 1.0).normalize();
+                            }
+                            r += color[0] * kernel_item;
+                            g += color[1] * kernel_item;
+                            b += color[2] * kernel_item;
                         }
                     }
                 }
+                if is_normals{
+                    let mut normal = Vector3::new(r, g, b).normalize();
+                    normal = (normal * 0.5 + Vector3::new(0.5, 0.5, 0.5)) * 255.0;
+                    blur_image[(i, j)] = Color32::from_rgb(normal.x.clamp(0.0, 255.0) as u8,
+                                                           normal.y.clamp(0.0, 255.0) as u8,
+                                                           normal.z.clamp(0.0, 255.0) as u8);
 
-                blur_image[(i, j)] = Color32::from_rgb(r.clamp(0.0, 255.0) as u8, g.clamp(0.0, 255.0) as u8, b.clamp(0.0, 255.0) as u8);
+                }else{
+                    blur_image[(i, j)] = Color32::from_rgb(r.clamp(0.0, 255.0) as u8, g.clamp(0.0, 255.0) as u8, b.clamp(0.0, 255.0) as u8);
+                }
+
             }
         }
 
         blur_image
-    }
-
-    pub fn image_downsampling(image: &ColorImage) -> ColorImage{
-        let (new_width, new_height) = ((image.width() as f32 / 2.0).floor() as usize, (image.height() as f32 / 2.0) as usize);
-        let mut mip_image = ColorImage::new([new_width, new_height], vec![Color32::BLACK; new_width * new_height]);
-
-        for j in (0..image.width()).step_by(2) {
-            for i in (0..image.height()).step_by(2) {
-                let top_left = image[(i, j)];
-
-                let mut bottom_left = Color32::BLACK;
-                if j + 1 < image.width(){
-                    bottom_left = image[(i, j + 1)];
-                }
-
-                let mut top_right = Color32::BLACK;
-                if i + 1 < image.height(){
-                    top_right = image[(i + 1, j)];
-                }
-
-                let mut bottom_right = Color32::BLACK;
-                if i + 1 < image.width() && j + 1 < image.height(){
-                    bottom_right = image[(i + 1, j + 1)];
-                }
-
-                let conv_color = Color32::from_rgb(((top_left.r() as i32 + bottom_left.r() as i32 + top_right.r() as i32 + bottom_right.r() as i32) / 4) as u8,
-                                                   ((top_left.g() as i32 + bottom_left.g() as i32 + top_right.g() as i32 + bottom_right.g() as i32) / 4) as u8,
-                                                   ((top_left.b() as i32 + bottom_left.b() as i32 + top_right.b() as i32 + bottom_right.b() as i32) / 4) as u8);
-
-
-                if i / 2 < mip_image.height() && j / 2 < mip_image.width(){
-                    mip_image[(i / 2, j / 2)] = conv_color;
-                }
-            }
-        }
-
-        mip_image
     }
 
     fn get_color(first_color: &Color32, second_color: &Color32, rs: f32) -> Color32 {
@@ -171,27 +243,37 @@ impl Texture {
             (first_color[2] as f32 * (1.0 - rs) + second_color[2] as f32 * rs) as u8,
         )
     }
-    
-    fn update_borders(&self, x: f32, y: f32) -> (usize, usize) {
+
+    pub fn resolution(&self) -> (usize, usize){
+        (self.image.width(), self.image.height())
+    }
+
+    fn update_borders(&self, x: f32, y: f32, mip_level: usize) -> (usize, usize) {
         let mut x = x as usize;
         let mut y = y as usize;
-        
-        if x >= self.image.width(){
+
+        if x >= self.images[mip_level].width(){
             x = 0;
         }
-        
-        if y >= self.image.height(){
+
+        if y >= self.images[mip_level].height(){
             y = 0;
         }
 
         (x, y)
     }
-    
-    pub fn bilinear_interpolation(&self, x: f32, y: f32) -> Color32{
-        let (x_tex, y_tex) = (x * (self.image.width() as f32), y * (self.image.height() as f32));
+
+    pub fn bilinear_interpolation(&self, x: f32, y: f32, mip_level: usize) -> Color32{
+        let mut mip_level = mip_level;
+
+        if mip_level >= self.images.len(){
+            mip_level = self.images.len() - 1;
+        }
+
+        let (x_tex, y_tex) = (x * (self.images[mip_level].width() as f32), y * (self.images[mip_level].height() as f32));
         let (x_top, y_top) = (x_tex.ceil(), y_tex.ceil());
         let (x_bottom, y_bottom) = (x_tex.floor(), y_tex.floor());
-        
+
         let mut rs = 0.0;
         if (x_top - x_bottom).abs() > f32::EPSILON {
             rs = (x_tex - x_bottom) / (x_top - x_bottom);
@@ -202,35 +284,50 @@ impl Texture {
             rt = (y_tex - y_bottom) / (y_top - y_bottom);
         }
 
-        let (x_top_r, y_top_r) = self.update_borders(x_top, y_top);
-        let (x_bottom_r, y_bottom_r) = self.update_borders(x_bottom, y_bottom);
-        
-        let color_top = Self::get_color(&self.image[(x_bottom_r, y_top_r)], &self.image[(x_top_r, y_top_r)], rs);
-        let color_bottom = Self::get_color(&self.image[(x_bottom_r, y_bottom_r)], &self.image[(x_top_r, y_bottom_r)], rs);
-        
+        let (x_top_r, y_top_r) = self.update_borders(x_top, y_top, mip_level);
+        let (x_bottom_r, y_bottom_r) = self.update_borders(x_bottom, y_bottom, mip_level);
+
+        let color_top = Self::get_color(&self.images[mip_level][(x_bottom_r, y_top_r)], &self.images[mip_level][(x_top_r, y_top_r)], rs);
+        let color_bottom = Self::get_color(&self.images[mip_level][(x_bottom_r, y_bottom_r)], &self.images[mip_level][(x_top_r, y_bottom_r)], rs);
+
         Self::get_color(&color_bottom, &color_top, rt)
     }
 
-    pub fn sample(&self, x: f32, y: f32) -> Color32 {
+    pub fn sample(&self, x: f32, y: f32, mip_level: usize) -> Color32 {
         let mut x = x;
         let mut y = y;
-        
+
         if x > 1.0 {
             x = x.fract();
         }
-       
+
         if  y > 1.0 {
             y = y.fract();
         }
-        
+
         if x < 0.0{
             x = x.fract() + 1.0;
         }
-        
+
         if y < 0.0{
             y = y.fract() + 1.0;
         }
-        
-        self.bilinear_interpolation(x, y)
+
+        self.bilinear_interpolation(x, y, mip_level)
+    }
+
+    pub fn trilinear_interpolation(&self, x: f32, y: f32, mip_level: f32) -> Color32{
+        let level_first = mip_level.floor() as usize;
+        let level_second = mip_level.ceil() as usize;
+        let rm = mip_level.fract();
+
+        if level_first == level_second{
+            return self.sample(x, y, level_first);
+        }
+
+        let first_color = self.sample(x, y, level_first);
+        let second_color = self.sample(x, y, level_second);
+
+        Self::get_color(&first_color, &second_color, rm)
     }
 }

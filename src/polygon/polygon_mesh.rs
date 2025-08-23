@@ -152,7 +152,7 @@ impl PolygonMesh {
         self.luminosity = luminosity;
     }
 
-    pub fn intersect(&self, ray: &Ray) -> Option<RayIntersect> {
+    pub fn intersect(&self, ray: &mut Ray) -> Option<RayIntersect> {
         let mut intersection: Option<RayIntersect> = None;
         let mut t_min = f32::INFINITY;
 

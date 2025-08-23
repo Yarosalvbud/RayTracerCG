@@ -19,7 +19,7 @@ impl Default for FovCamera {
             world_up: Vector3::new(0.0, 1.0, 0.0),
             yaw: -90.0,
             pitch: 0.0,
-            fov: 50.0,
+            fov: 39.0,
         }
     }
 }

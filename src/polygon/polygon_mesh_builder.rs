@@ -42,7 +42,7 @@ impl PolygonMeshBuilder {
     
     pub fn build_texture(object: &mut PolygonMesh, texture: Option<String>) -> Result<(), UiError>{
         if let Some(texture) = texture {
-            let texture = Texture::new(texture);
+            let texture = Texture::new(texture, false);
             if let Err(_) = texture.clone() {
                 return Err(UiError::LoadTextureError);
             } else {
@@ -57,7 +57,7 @@ impl PolygonMeshBuilder {
     
     pub fn build_normal_map(object: &mut PolygonMesh, normals: Option<String>) -> Result<(), UiError>{
         if let Some(n) = normals {
-            let normals_data = Texture::new(n);
+            let normals_data = Texture::new(n, true);
             if let Err(_) = normals_data {
                 return Err(UiError::LoadNormalsError);
             } else {
