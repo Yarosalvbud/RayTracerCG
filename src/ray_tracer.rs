@@ -286,7 +286,7 @@ impl Ray {
                 let r = Self::reflected_ray(&l, &n);
 
                 let diffuse = n.dot(&l).max(0.0) * light.intensity;
-                let specular = r.dot(&n).max(0.0).powi(object.luminosity) * light.intensity;
+                let specular = r.dot(&s).max(0.0).powi(object.luminosity) * light.intensity;
                 let background = light.ka * light.back_intensity;
 
                 color_r += background * light.color[0] as f32

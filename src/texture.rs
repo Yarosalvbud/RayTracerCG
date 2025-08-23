@@ -35,11 +35,10 @@ impl Texture {
             Ok(img) => img,
             Err(e) => return Err(format!("Невозможно открыть изображение: {}", e)),
         };
-
+        
         let img_rgba = img.to_rgba8();
 
         let size = [img_rgba.width() as usize, img_rgba.height() as usize];
-
         Ok(ColorImage::from_rgba_unmultiplied(size, &img_rgba))
     }
 
