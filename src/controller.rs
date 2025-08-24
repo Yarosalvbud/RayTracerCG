@@ -64,7 +64,8 @@ impl Default for Controller {
         camera.rotate(&Vector3::new(-43.0, 120.0, 0.0));
 
         let mut light = DistantLight::default();
-        light.translate(&Vector3::new(4.07, -1.0, 5.9));
+        light.translate(&Vector3::new(4.07, -1.0, 3.9));
+
 
         Controller {
             meshes,

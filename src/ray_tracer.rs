@@ -5,6 +5,7 @@ use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
 use egui::{Color32, ColorImage};
 use nalgebra::{Point3, Vector3};
 use rayon::prelude::*;
+use crate::texture::Texture;
 
 const BIAS: f32 = 1e-4;
 
@@ -26,12 +27,8 @@ impl Default for IntersectionDifferentials {
     }
 }
 
-
-#[derive(Debug, Clone)]
-pub struct Ray {
-    pub origin: Point3<f32>,
-    pub direction: Vector3<f32>,
-    pub depth: i32,
+#[derive(Clone, Debug)]
+pub struct RayDifferentials {
     pub d_d: Differentials,
     pub d_o: Option<Differentials>,
     pub non_norm_direction: Vector3<f32>,
@@ -39,6 +36,59 @@ pub struct Ray {
     pub dv: IntersectionDifferentials,
     pub e1: Vector3<f32>,
     pub e2: Vector3<f32>,
+    pub dn: Differentials,
+    pub d_s: IntersectionDifferentials,
+    pub d_t: IntersectionDifferentials,
+}
+
+impl Default for RayDifferentials {
+    fn default() -> Self {
+        RayDifferentials {
+            d_d: Differentials::default(),
+            d_o: None,
+            non_norm_direction: Vector3::zeros(),
+            du: IntersectionDifferentials::default(),
+            dv: IntersectionDifferentials::default(),
+            e1: Vector3::zeros(),
+            e2: Vector3::zeros(),
+            dn: Differentials::default(),
+            d_s: IntersectionDifferentials::default(),
+            d_t: IntersectionDifferentials::default(),
+        }
+    }
+}
+
+impl RayDifferentials {
+    pub fn new(
+        d_d: Differentials,
+        d_o: Option<Differentials>,
+        non_norm_direction: Vector3<f32>,
+        du: IntersectionDifferentials,
+        dv: IntersectionDifferentials,
+        e1: Vector3<f32>,
+        e2: Vector3<f32>,
+    ) -> Self {
+        Self {
+            d_d,
+            d_o,
+            non_norm_direction,
+            du,
+            dv,
+            e1,
+            e2,
+            dn: Differentials::default(),
+            d_s: IntersectionDifferentials::default(),
+            d_t: IntersectionDifferentials::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Ray {
+    pub origin: Point3<f32>,
+    pub direction: Vector3<f32>,
+    pub depth: i32,
+    pub differentials: RayDifferentials,
 }
 
 impl Ray {
@@ -47,13 +97,7 @@ impl Ray {
             origin,
             direction,
             depth: 1,
-            d_d: Differentials::default(),
-            d_o: None,
-            non_norm_direction: Vector3::zeros(),
-            du: IntersectionDifferentials::default(),
-            dv: IntersectionDifferentials::default(),
-            e1: Vector3::zeros(),
-            e2: Vector3::zeros(),
+            differentials: RayDifferentials::default(),
         }
     }
     pub fn render(
@@ -95,18 +139,20 @@ impl Ray {
                     let dot_product = dir_world.dot(&dir_world);
                     let dot_product_power = (dot_product * dot_product * dot_product).sqrt();
 
-                    let dd_dx = ((dot_product * r) - ((dir_world.dot(&r)) * dir_world)) / dot_product_power;
-                    let dd_dy = ((dot_product * u) - (dir_world.dot(&u) * dir_world)) / dot_product_power;
+                    let dd_dx =
+                        ((dot_product * r) - ((dir_world.dot(&r)) * dir_world)) / dot_product_power;
+                    let dd_dy =
+                        ((dot_product * u) - (dir_world.dot(&u) * dir_world)) / dot_product_power;
 
                     let mut ray = Ray::new(origin, dir_world.normalize());
-                    ray.d_d.0 = dd_dx;
-                    ray.d_d.1 = dd_dy;
-                    ray.non_norm_direction = dir_world;
-                    ray.d_o = Some(Differentials(Vector3::zeros(), Vector3::zeros()));
+                    ray.differentials.d_d = Differentials(dd_dx, dd_dy);
+                    ray.differentials.non_norm_direction = dir_world;
+                    ray.differentials.d_o = Some(Differentials(Vector3::zeros(), Vector3::zeros()));
 
                     let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone());
+                    let srgb_color = Texture::linear_to_srgb(&color);
 
-                    row[x] = Color32::from_rgb(color[0], color[1], color[2]);
+                    row[x] = Color32::from_rgb(srgb_color[0], srgb_color[1], srgb_color[2]);
                 }
             });
 
@@ -176,7 +222,7 @@ impl Ray {
     fn reflected_ray(l: &Vector3<f32>, n: &Vector3<f32>) -> Vector3<f32> {
         let beta = 2.0 * l.dot(&n);
 
-        (beta * n - l).normalize()
+        beta * n - l
     }
 
     fn refracted_ray(l: &Vector3<f32>, n: &Vector3<f32>) -> Vector3<f32> {
@@ -199,6 +245,45 @@ impl Ray {
         nalgebra::distance(&point_1.intersection_point, &point_2.intersection_point) + 1.0
     }
 
+    fn reflected_differentials(&mut self, n: &Vector3<f32>) -> Differentials {
+        let dd_dn_dx =
+            self.differentials.d_d.0.dot(&n) + self.direction.dot(&self.differentials.dn.0);
+        let dd_dn_dy =
+            self.differentials.d_d.1.dot(&n) + self.direction.dot(&self.differentials.dn.1);
+        let n_dot_dir = n.dot(&self.direction);
+
+        let dd_dx =
+            self.differentials.d_d.0 - 2.0 * (n_dot_dir * self.differentials.dn.0 + dd_dn_dx * n);
+        let dd_dy =
+            self.differentials.d_d.1 - 2.0 * (n_dot_dir * self.differentials.dn.1 + dd_dn_dy * n);
+
+        Differentials(dd_dx, dd_dy)
+    }
+
+    fn refracted_differentials(
+        &mut self,
+        n: &Vector3<f32>,
+        refracted_dir: &Vector3<f32>,
+    ) -> Differentials {
+        let dir_dot_n = self.direction.dot(&n);
+        let ref_dot_n = refracted_dir.dot(&n);
+
+        let dd_dn_dx =
+            self.differentials.d_d.0.dot(&n) + self.direction.dot(&self.differentials.dn.0);
+        let dd_dn_dy =
+            self.differentials.d_d.1.dot(&n) + self.direction.dot(&self.differentials.dn.1);
+
+        let mu = dir_dot_n - ref_dot_n;
+
+        let dmu_dx = (1.0 - dir_dot_n / ref_dot_n) * dd_dn_dx;
+        let dmu_dy = (1.0 - dir_dot_n / ref_dot_n) * dd_dn_dy;
+
+        let dd_dx = self.differentials.d_d.0 - (mu * self.differentials.dn.0 + dmu_dx * n);
+        let dd_dy = self.differentials.d_d.1 - (mu * self.differentials.dn.1 + dmu_dy * n);
+
+        Differentials(dd_dx, dd_dy)
+    }
+
     pub fn cast(
         &mut self,
         objects: &PolygonMeshes,
@@ -206,8 +291,8 @@ impl Ray {
         max_depth: i32,
         prev_intersection: Option<&RayIntersect>,
         bg_color: Vec<u8>,
-    ) -> (Vec<u8>, bool) {
-        let mut color = vec![0, 0, 0];
+    ) -> (Vec<f32>, bool) {
+        let mut color = vec![0.0, 0.0, 0.0];
         let mut is_hit = false;
 
         if let Some((hit, idx)) = self.ray_intersection(objects) {
@@ -215,9 +300,12 @@ impl Ray {
             let n = hit.surface_normal;
             let s = -self.direction;
             let object = objects.get_object(idx);
-            let mut object_color = object.color.clone();
+
+            let object_color_srgb = object.color.clone();
+            let mut object_color = Texture::srgb_to_linear(&object_color_srgb);
+            
             if let Some(color) = hit.texture_color {
-                object_color = vec![color[0], color[1], color[2]];
+                object_color = Texture::srgb_to_linear(&vec![color[0], color[1], color[2]]);
             }
 
             let reflected_dir = Self::reflected_ray(&s, &n);
@@ -233,41 +321,71 @@ impl Ray {
                 reflected_origin = hit.intersection_point - BIAS * n;
             }
 
-            let mut reflected_ray = Ray::new(reflected_origin, reflected_dir);
-            reflected_ray.d_o = None;
-            let mut refracted_ray = Ray::new(refracted_origin, refracted_dir);
-            refracted_ray.d_o = None;
+            let mut reflected_ray = Ray::new(reflected_origin, reflected_dir.normalize());
+            reflected_ray.differentials.d_o = None;
+
+            let mut refracted_ray = Ray::new(refracted_origin, refracted_dir.normalize());
+            refracted_ray.differentials.d_o = None;
 
             reflected_ray.depth = self.depth + 1;
             refracted_ray.depth = self.depth + 1;
 
+            let reflected_d_dir = self.reflected_differentials(&n);
+            let refracted_d_dir = self.refracted_differentials(&n, &refracted_dir.normalize());
+
+            let reflected_differentials = RayDifferentials::new(
+                reflected_d_dir,
+                None,
+                reflected_dir,
+                self.differentials.du.clone(),
+                self.differentials.dv.clone(),
+                self.differentials.e1.clone(),
+                self.differentials.e2.clone(),
+            );
+            let refracted_differentials = RayDifferentials::new(
+                refracted_d_dir,
+                None,
+                refracted_dir,
+                self.differentials.du.clone(),
+                self.differentials.dv.clone(),
+                self.differentials.e1.clone(),
+                self.differentials.e2.clone(),
+            );
+
+            reflected_ray.differentials = reflected_differentials;
+            refracted_ray.differentials = refracted_differentials;
+
             if self.depth < max_depth {
-                let (reflected_color, reflected_hit) = Ray::cast(
-                    &mut reflected_ray,
-                    objects,
-                    lights,
-                    max_depth,
-                    Some(&hit),
-                    bg_color.clone(),
-                );
-                if reflected_hit {
-                    color[0] += (object.ks[0] * reflected_color[0] as f32) as u8;
-                    color[1] += (object.ks[1] * reflected_color[1] as f32) as u8;
-                    color[2] += (object.ks[2] * reflected_color[2] as f32) as u8;
+                if object.ks[0] != 0.0 || object.ks[1] != 0.0 || object.ks[2] != 0.0 {
+                    let (reflected_color, reflected_hit) = Ray::cast(
+                        &mut reflected_ray,
+                        objects,
+                        lights,
+                        max_depth,
+                        Some(&hit),
+                        bg_color.clone(),
+                    );
+                    if reflected_hit {
+                        color[0] += object.ks[0] * reflected_color[0];
+                        color[1] += object.ks[1] * reflected_color[1];
+                        color[2] += object.ks[2] * reflected_color[2];
+                    }
                 }
 
-                let (refracted_color, refracted_hit) = Ray::cast(
-                    &mut refracted_ray,
-                    objects,
-                    lights,
-                    max_depth,
-                    Some(&hit),
-                    bg_color.clone(),
-                );
-                if refracted_hit {
-                    color[0] += (object.kt[0] * refracted_color[0] as f32) as u8;
-                    color[1] += (object.kt[1] * refracted_color[1] as f32) as u8;
-                    color[2] += (object.kt[2] * refracted_color[2] as f32) as u8;
+                if object.kt[0] != 0.0 || object.kt[1] != 0.0 || object.kt[2] != 0.0 {
+                    let (refracted_color, refracted_hit) = Ray::cast(
+                        &mut refracted_ray,
+                        objects,
+                        lights,
+                        max_depth,
+                        Some(&hit),
+                        bg_color.clone(),
+                    );
+                    if refracted_hit {
+                        color[0] += object.kt[0] * refracted_color[0];
+                        color[1] += object.kt[1] * refracted_color[1];
+                        color[2] += object.kt[2] * refracted_color[2];
+                    }
                 }
             }
 
@@ -283,21 +401,22 @@ impl Ray {
                 }
                 let mut shadow_ray = Ray::new(shadow_origin, l);
                 let shadow_param = shadow_ray.shadow_ray_intersection(objects, light);
-                let r = Self::reflected_ray(&l, &n);
+                let r = Self::reflected_ray(&l, &n).normalize();
 
                 let diffuse = n.dot(&l).max(0.0) * light.intensity;
                 let specular = r.dot(&s).max(0.0).powi(object.luminosity) * light.intensity;
                 let background = light.ka * light.back_intensity;
+                let light_color = Texture::srgb_to_linear(&light.color);
 
-                color_r += background * light.color[0] as f32
-                    + (object_color[0] as f32 * object.kd[0] * diffuse * shadow_param[0]
-                        + object.ks[0] * specular * light.color[0] as f32 * shadow_param[0]);
-                color_g += background * light.color[1] as f32
-                    + (object_color[1] as f32 * object.kd[1] * diffuse * shadow_param[1]
-                        + object.ks[1] * specular * light.color[1] as f32 * shadow_param[1]);
-                color_b += background * light.color[2] as f32
-                    + (object_color[2] as f32 * object.kd[2] * diffuse * shadow_param[2]
-                        + object.ks[2] * specular * light.color[2] as f32 * shadow_param[2]);
+                color_r += background * light_color[0]
+                    + (object_color[0] * object.kd[0] * diffuse * shadow_param[0]
+                        + object.ks[0] * specular * light_color[0] * shadow_param[0]);
+                color_g += background * light_color[1]
+                    + (object_color[1] * object.kd[1] * diffuse * shadow_param[1]
+                        + object.ks[1] * specular * light_color[1] * shadow_param[1]);
+                color_b += background * light_color[2]
+                    + (object_color[2] * object.kd[2] * diffuse * shadow_param[2]
+                        + object.ks[2] * specular * light_color[2] * shadow_param[2]);
             }
 
             if let Some(intersection) = prev_intersection {
@@ -307,13 +426,13 @@ impl Ray {
                 color_b /= d;
             }
 
-            color[0] = (color[0] as usize + color_r.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
-            color[1] = (color[1] as usize + color_g.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
-            color[2] = (color[2] as usize + color_b.clamp(0.0, 255.0) as usize).clamp(0, 255) as u8;
+            color[0] += color_r;
+            color[1] += color_g;
+            color[2] += color_b;
 
             return (color, is_hit);
         }
 
-        (bg_color, is_hit)
+        (Texture::srgb_to_linear(&bg_color), is_hit)
     }
 }

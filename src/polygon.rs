@@ -2,12 +2,11 @@ pub mod file_reader;
 pub mod polygon_mesh;
 pub mod polygon_mesh_builder;
 
-use crate::ray_tracer::Ray;
+use crate::ray_tracer::{Differentials, IntersectionDifferentials, Ray};
 use crate::texture::Texture;
 use egui::Color32;
-use nalgebra::{Matrix3, Matrix4, Point2, Point3, RealField, RowVector3, Vector3};
+use nalgebra::{Matrix3, Matrix4, Point2, Point3, RowVector3, Vector3};
 use std::sync::Arc;
-
 #[derive(Debug, Clone)]
 pub struct Polygon {
     vertexes: Vec<Point3<f32>>,
@@ -95,7 +94,7 @@ impl Polygon {
     }
 
     pub fn color_from_texture(&self, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Color32 {
-        texture.trilinear_interpolation(point.x, point.y, mip_level)
+        texture.trilinear_interpolation(point.x, point.y, mip_level, Texture::get_texture_color)
     }
 
     pub fn create_tbn(&mut self) {
@@ -121,50 +120,71 @@ impl Polygon {
         self.tbn = Arc::new(Matrix3::from_rows(&[tangent, bitangent, normal]).transpose());
     }
 
-    pub fn normal_mapping(&self, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Vector3<f32> {
-        let normal = texture.trilinear_interpolation(point.x, point.y, mip_level);
+    pub fn sample_normal(&self, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Vector3<f32> {
+        let normal = texture.trilinear_interpolation(point.x, point.y, mip_level, Texture::get_color);
         let poly_normal = Vector3::new(
             (normal[0] as f32 / 255.0) * 2.0 - 1.0,
             (normal[1] as f32 / 255.0) * 2.0 - 1.0,
             (normal[2] as f32 / 255.0) * 2.0 - 1.0,
         );
-        
+
         (self.tbn.as_ref() * poly_normal).normalize()
+    }
+
+    pub fn normal_mapping(&self, ray: &mut Ray, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Vector3<f32> {
+        let image_size = texture.resolution();
+        let du = 1.0 / (image_size.0 as f32);
+        let dv = 1.0 / (image_size.1 as f32);
+
+        let normal = self.sample_normal(texture, point, mip_level);
+        let shifted_right = self.sample_normal(texture, &Point2::new(point.x + du, point.y), mip_level);
+        let shifted_left = self.sample_normal(texture, &Point2::new(point.x - du, point.y), mip_level);
+
+        let shifted_up = self.sample_normal(texture, &Point2::new(point.x, point.y + dv), mip_level);
+        let shifted_down = self.sample_normal(texture, &Point2::new(point.x, point.y - dv), mip_level);
+
+        let dn_du = (shifted_right - shifted_left) * 0.5;
+        let dn_dv = (shifted_up - shifted_down) * 0.5;
+
+        let dn_dx = dn_du * ray.differentials.d_s.0 + dn_dv * ray.differentials.d_t.0;
+        let dn_dy = dn_du * ray.differentials.d_s.1 + dn_dv * ray.differentials.d_t.1;
+
+        ray.differentials.dn = Differentials(Vector3::zeros(), Vector3::zeros());
+
+        normal
     }
 
     pub fn mip_level(&self, ray: &mut Ray, t: f32, texture: &Texture) ->f32{
         let mut d_o_x = Vector3::zeros();
         let mut d_o_y = Vector3::zeros();
 
-        if let None = ray.d_o{
-            d_o_x = ray.du.0 * ray.e1 + ray.dv.0 * ray.e2;
-            d_o_y = ray.du.1 * ray.e1 + ray.dv.1 * ray.e2;
+        if let None = ray.differentials.d_o{
+            d_o_x = ray.differentials.du.0 * ray.differentials.e1 + ray.differentials.dv.0 * ray.differentials.e2;
+            d_o_y = ray.differentials.du.1 * ray.differentials.e1 + ray.differentials.dv.1 * ray.differentials.e2;
         }
 
         let e1 = self.vertexes[1] - self.vertexes[0];
         let e2 = self.vertexes[2] - self.vertexes[0];
 
-        ray.e1 = e1.clone();
-        ray.e2 = e2.clone();
+        ray.differentials.e1 = e1.clone();
+        ray.differentials.e2 = e2.clone();
 
-        let k = 1.0 / e1.cross(&e2).dot(&ray.non_norm_direction);
-        let c_u = e2.cross(&ray.non_norm_direction);
-        let c_v = ray.non_norm_direction.cross(&e1);
+        let k = 1.0 / e1.cross(&e2).dot(&ray.differentials.non_norm_direction);
+        let c_u = e2.cross(&ray.differentials.non_norm_direction);
+        let c_v = ray.differentials.non_norm_direction.cross(&e1);
 
-        let q = d_o_x + t * ray.d_d.0;
-        let r = d_o_y + t * ray.d_d.1;
+        let q = d_o_x + t * ray.differentials.d_d.0;
+        let r = d_o_y + t * ray.differentials.d_d.1;
 
         let du_dx = k * c_u.dot(&q);
         let du_dy = k * c_u.dot(&r);
 
-        ray.du.0 = du_dx;
-        ray.du.1 = du_dy;
+        ray.differentials.du = IntersectionDifferentials(du_dx, du_dy);
 
         let dv_dx = k * c_v.dot(&q);
         let dv_dy = k * c_v.dot(&r);
 
-        ray.dv.0 = du_dx;
-        ray.dv.1 = du_dy;
+        ray.differentials.dv = IntersectionDifferentials(dv_dx, dv_dy);
 
         let g1 = self.uv[1] - self.uv[0];
         let g2 = self.uv[2] - self.uv[0];
@@ -179,6 +199,9 @@ impl Polygon {
 
         let ro_first = (ds_dx * ds_dx + dt_dx * dt_dx).sqrt();
         let ro_second = (ds_dy * ds_dy + dt_dy * dt_dy).sqrt();
+
+        ray.differentials.d_s = IntersectionDifferentials(ds_dx, ds_dy);
+        ray.differentials.d_t = IntersectionDifferentials(dt_dx, dt_dy);
 
         ro_first.max(ro_second).log2().max(0.0)
     }
@@ -245,7 +268,7 @@ impl Polygon {
                     <Point3<f32>>::from(intersection_point),
                     Point3::new(u, v, w),
                     t,
-                    self.normal_mapping(&normal_map, &point, mip_level),
+                    self.normal_mapping(ray, &normal_map, &point, mip_level),
                     Some(self.color_from_texture(&texture, &point, mip_level)),
                 ));
             }
@@ -255,6 +278,23 @@ impl Polygon {
                 t,
                 self.normal.normalize(),
                 Some(self.color_from_texture(&texture, &point, mip_level)),
+            ));
+        }
+
+        if let Some(normal_map) = normal_map {
+            let point = Point2::new(
+                self.uv[0].x * u + self.uv[1].x * v + self.uv[2].x * w,
+                self.uv[0].y * u + self.uv[1].y * v + self.uv[2].y * w,
+            );
+
+            let mip_level = self.mip_level(ray, t, normal_map);
+
+            return Some(RayIntersect::new(
+                <Point3<f32>>::from(intersection_point),
+                Point3::new(u, v, w),
+                t,
+                self.normal_mapping(ray, &normal_map, &point, mip_level),
+                None,
             ));
         }
 

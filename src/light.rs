@@ -14,8 +14,8 @@ impl Default for DistantLight{
         DistantLight{
             origin: Point3::new(0.0, 0.0 , 0.0),
             intensity: 0.8,
-            back_intensity: 0.2,
-            ka: 0.3,
+            back_intensity: 0.1,
+            ka: 0.01,
             color: vec![255, 255, 255]
         }
     }
@@ -35,7 +35,7 @@ impl DistantLight{
     }
 
     pub fn change_light_back_intensity(&mut self, intensity: f32){
-        self.intensity = intensity;
+        self.back_intensity = intensity;
     }
 
     pub fn change_ka(&mut self, ka: f32){

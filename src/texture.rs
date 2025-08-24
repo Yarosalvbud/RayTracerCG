@@ -16,7 +16,7 @@ impl Texture {
         let image = Self::read_image(&path)?;
         let mut mip_levels = Vec::new();
 
-        Self::create_mipmaps(&image, &path, &mut mip_levels, is_normals);
+        Self::create_mipmaps(&mut mip_levels, &image, &path, is_normals);
 
         Ok(Self {
             image: Arc::new(image),
@@ -42,7 +42,7 @@ impl Texture {
         Ok(ColorImage::from_rgba_unmultiplied(size, &img_rgba))
     }
 
-    fn load_mip_maps(dest_dir: &str, file_name: &str, images: &mut Vec<ColorImage>){
+    fn load_mip_maps(images: &mut Vec<ColorImage>, dest_dir: &str, file_name: &str){
         let mut mip_level = 0;
         let mut path = format!("{dest_dir}/{file_name}_{mip_level}.png");
 
@@ -53,14 +53,14 @@ impl Texture {
         }
     }
 
-    fn create_mipmaps(image: &ColorImage, path: &str, images: &mut Vec<ColorImage>, is_normals: bool) {
+    fn create_mipmaps(images: &mut Vec<ColorImage>, image: &ColorImage, path: &str, is_normals: bool) {
         let dest_dir = std::env::var("MIP_MAPS_DIR").expect("Директория для сохранения не найдена");
         let path = Path::new(path);
 
         let file_name = path.file_name().unwrap().to_str().unwrap().split('.').collect::<Vec<&str>>()[0];
         let mut mip_level = 0;
         if Path::new(&format!("{dest_dir}/{file_name}_{mip_level}.png")).exists() {
-            Self::load_mip_maps(&dest_dir, &file_name, images);
+            Self::load_mip_maps(images, &dest_dir, &file_name);
             return;
         }
 
@@ -107,9 +107,7 @@ impl Texture {
 
         for y in (0..image.height()).step_by(2) {
             for x in (0..image.width()).step_by(2) {
-                let mut r = 0;
-                let mut g = 0;
-                let mut b = 0;
+                let mut color_sum = vec![0.0, 0.0, 0.0];
                 let mut count = 0;
 
                 let mut normals_sum = Vector3::<f32>::new(0.0, 0.0, 0.0);
@@ -119,9 +117,9 @@ impl Texture {
                         let px = x + dx;
                         let py = y + dy;
                         if px < image.width() && py < image.height() {
-                            let color_texture = image[(px, py)];
-
                             if is_normals {
+                                let color_texture = image[(px, py)];
+
                                 let n = Vector3::new(
                                     (color_texture.r() as f32 / 255.0) * 2.0 - 1.0,
                                     (color_texture.g() as f32 / 255.0) * 2.0 - 1.0,
@@ -129,9 +127,12 @@ impl Texture {
                                 ).normalize();
                                 normals_sum += n;
                             } else {
-                                r += color_texture.r() as u32;
-                                g += color_texture.g() as u32;
-                                b += color_texture.b() as u32;
+                                let color_texture = image[(px, py)];
+                                let color_linear = Self::srgb_to_linear(&vec![color_texture[0], color_texture[1], color_texture[2]]);
+
+                                color_sum[0] += color_linear[0];
+                                color_sum[1] += color_linear[1];
+                                color_sum[2] += color_linear[2];
                             }
 
                             count += 1;
@@ -150,10 +151,16 @@ impl Texture {
                         Color32::BLACK
                     }
                 } else {
+                    color_sum[0] /= count as f32;
+                    color_sum[1] /= count as f32;
+                    color_sum[2] /= count as f32;
+
+                    let srgb_color = Self::linear_to_srgb(&color_sum);
+
                     Color32::from_rgb(
-                        (r / count) as u8,
-                        (g / count) as u8,
-                        (b / count) as u8,
+                        srgb_color[0],
+                        srgb_color[1],
+                        srgb_color[2],
                     )
                 };
 
@@ -193,9 +200,7 @@ impl Texture {
         for i in 0..image.width(){
             for j in 0..image.height(){
 
-                let mut r = 0.0;
-                let mut g = 0.0;
-                let mut b = 0.0;
+                let mut conv_color = vec![0.0, 0.0, 0.0];
 
                 for x in -radius..=radius{
                     for y in -radius..=radius{
@@ -211,22 +216,26 @@ impl Texture {
                                 color = Vector3::new((color[0] / 255.0) * 2.0 - 1.0,
                                              (color[1] / 255.0) * 2.0 - 1.0,
                                              (color[2] / 255.0) * 2.0 - 1.0).normalize();
+                            }else{
+                                let linear = Self::srgb_to_linear(&vec![image_color[0], image_color[1], image_color[2]]);
+                                color = Vector3::new(linear[0], linear[1], linear[2]);
                             }
-                            r += color[0] * kernel_item;
-                            g += color[1] * kernel_item;
-                            b += color[2] * kernel_item;
+                            conv_color[0] += color[0] * kernel_item;
+                            conv_color[1] += color[1] * kernel_item;
+                            conv_color[2] += color[2] * kernel_item;
                         }
                     }
                 }
                 if is_normals{
-                    let mut normal = Vector3::new(r, g, b).normalize();
+                    let mut normal = Vector3::new(conv_color[0], conv_color[1], conv_color[2]).normalize();
                     normal = (normal * 0.5 + Vector3::new(0.5, 0.5, 0.5)) * 255.0;
                     blur_image[(i, j)] = Color32::from_rgb(normal.x.clamp(0.0, 255.0) as u8,
                                                            normal.y.clamp(0.0, 255.0) as u8,
                                                            normal.z.clamp(0.0, 255.0) as u8);
 
                 }else{
-                    blur_image[(i, j)] = Color32::from_rgb(r.clamp(0.0, 255.0) as u8, g.clamp(0.0, 255.0) as u8, b.clamp(0.0, 255.0) as u8);
+                    let color = Self::linear_to_srgb(&conv_color);
+                    blur_image[(i, j)] = Color32::from_rgb(color[0], color[1], color[2]);
                 }
 
             }
@@ -235,12 +244,26 @@ impl Texture {
         blur_image
     }
 
-    fn get_color(first_color: &Color32, second_color: &Color32, rs: f32) -> Color32 {
+    pub fn get_color(first_color: &Color32, second_color: &Color32, rs: f32) -> Color32 {
         Color32::from_rgb(
             (first_color[0] as f32 * (1.0 - rs) + second_color[0] as f32 * rs) as u8,
             (first_color[1] as f32 * (1.0 - rs) + second_color[1] as f32 * rs) as u8,
             (first_color[2] as f32 * (1.0 - rs) + second_color[2] as f32 * rs) as u8,
         )
+    }
+
+    pub fn get_texture_color(first_color: &Color32, second_color: &Color32, rs: f32) -> Color32 {
+        let first_color = Texture::srgb_to_linear(&vec![first_color[0], first_color[1], first_color[2]]);
+        let second_color = Texture::srgb_to_linear(&vec![second_color[0], second_color[1], second_color[2]]);
+
+        let interpolated_color = vec![
+          first_color[0] * (1.0 - rs) + second_color[0] * rs,
+          first_color[1] * (1.0 - rs) + second_color[1] * rs,
+          first_color[2] * (1.0 - rs) + second_color[2] * rs,
+        ];
+
+        let srgb_color = Texture::linear_to_srgb(&interpolated_color);
+        Color32::from_rgb(srgb_color[0], srgb_color[1], srgb_color[2])
     }
 
     pub fn resolution(&self) -> (usize, usize){
@@ -262,7 +285,7 @@ impl Texture {
         (x, y)
     }
 
-    pub fn bilinear_interpolation(&self, x: f32, y: f32, mip_level: usize) -> Color32{
+    pub fn bilinear_interpolation(&self, x: f32, y: f32, mip_level: usize, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32{
         let mut mip_level = mip_level;
 
         if mip_level >= self.images.len(){
@@ -285,14 +308,15 @@ impl Texture {
 
         let (x_top_r, y_top_r) = self.update_borders(x_top, y_top, mip_level);
         let (x_bottom_r, y_bottom_r) = self.update_borders(x_bottom, y_bottom, mip_level);
+        
+        let color_top = interpolator(&self.images[mip_level][(x_bottom_r, y_top_r)], &self.images[mip_level][(x_top_r, y_top_r)], rs);
+        let color_bottom = interpolator(&self.images[mip_level][(x_bottom_r, y_bottom_r)], &self.images[mip_level][(x_top_r, y_bottom_r)], rs);
 
-        let color_top = Self::get_color(&self.images[mip_level][(x_bottom_r, y_top_r)], &self.images[mip_level][(x_top_r, y_top_r)], rs);
-        let color_bottom = Self::get_color(&self.images[mip_level][(x_bottom_r, y_bottom_r)], &self.images[mip_level][(x_top_r, y_bottom_r)], rs);
-
-        Self::get_color(&color_bottom, &color_top, rt)
+        interpolator(&color_bottom, &color_top, rt)
+        
     }
 
-    pub fn sample(&self, x: f32, y: f32, mip_level: usize) -> Color32 {
+    pub fn sample(&self, x: f32, y: f32, mip_level: usize, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32 {
         let mut x = x;
         let mut y = y;
 
@@ -312,21 +336,55 @@ impl Texture {
             y = y.fract() + 1.0;
         }
 
-        self.bilinear_interpolation(x, y, mip_level)
+        self.bilinear_interpolation(x, y, mip_level, interpolator)
     }
 
-    pub fn trilinear_interpolation(&self, x: f32, y: f32, mip_level: f32) -> Color32{
+    pub fn trilinear_interpolation(&self, x: f32, y: f32, mip_level: f32, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32{
         let level_first = mip_level.floor() as usize;
         let level_second = mip_level.ceil() as usize;
         let rm = mip_level.fract();
 
         if level_first == level_second{
-            return self.sample(x, y, level_first);
+            return self.sample(x, y, level_first, interpolator);
         }
 
-        let first_color = self.sample(x, y, level_first);
-        let second_color = self.sample(x, y, level_second);
+        let first_color = self.sample(x, y, level_first, interpolator);
+        let second_color = self.sample(x, y, level_second, interpolator);
 
         Self::get_color(&first_color, &second_color, rm)
+    }
+
+    pub fn srgb_to_linear(color: &Vec<u8>) -> Vec<f32>{
+        let mut linear_color: Vec<f32> = Vec::with_capacity(color.len());
+
+        for item in color.iter() {
+            let mut item = *item as f32 / 255.0;
+            if item <= 0.04045{
+                item /= 12.92;
+            }else{
+                item = ((item + 0.055) / 1.055).powf(2.4);
+            }
+
+            linear_color.push(item);
+        }
+
+        linear_color
+    }
+
+    pub fn linear_to_srgb(color: &Vec<f32>) -> Vec<u8>{
+        let mut srgb_color: Vec<u8> = Vec::with_capacity(color.len());
+
+        for item in color.iter() {
+            let srgb = if *item <= 0.0031308{
+                item * 12.92
+            }else{
+              1.055 * item.powf(1.0 / 2.4) - 0.055
+            };
+
+            srgb_color.push((srgb.clamp(0.0, 1.0) * 255.0).round() as u8);
+        }
+
+
+        srgb_color
     }
 }
