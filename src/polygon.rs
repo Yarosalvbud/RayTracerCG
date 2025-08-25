@@ -149,7 +149,7 @@ impl Polygon {
         let dn_dx = dn_du * ray.differentials.d_s.0 + dn_dv * ray.differentials.d_t.0;
         let dn_dy = dn_du * ray.differentials.d_s.1 + dn_dv * ray.differentials.d_t.1;
 
-        ray.differentials.dn = Differentials(Vector3::zeros(), Vector3::zeros());
+        ray.differentials.dn = Differentials(Vector3::zeros(), Vector3::zeros()); //todo(Что с этим делать?)
 
         normal
     }

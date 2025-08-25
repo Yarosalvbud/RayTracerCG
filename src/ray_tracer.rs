@@ -2,10 +2,11 @@ use crate::camera::FovCamera;
 use crate::light::DistantLight;
 use crate::polygon::RayIntersect;
 use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
+use crate::texture::Texture;
 use egui::{Color32, ColorImage};
 use nalgebra::{Point3, Vector3};
 use rayon::prelude::*;
-use crate::texture::Texture;
+use crate::polygon::polygon_mesh::PolygonMesh;
 
 const BIAS: f32 = 1e-4;
 
@@ -149,7 +150,7 @@ impl Ray {
                     ray.differentials.non_norm_direction = dir_world;
                     ray.differentials.d_o = Some(Differentials(Vector3::zeros(), Vector3::zeros()));
 
-                    let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone());
+                    let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone()); //todo(Много источников света, глубина трассировки)
                     let srgb_color = Texture::linear_to_srgb(&color);
 
                     row[x] = Color32::from_rgb(srgb_color[0], srgb_color[1], srgb_color[2]);
@@ -284,6 +285,104 @@ impl Ray {
         Differentials(dd_dx, dd_dy)
     }
 
+    pub fn secondary_rays(
+        &mut self,
+        objects: &PolygonMeshes,
+        lights: &Vec<DistantLight>,
+        max_depth: i32,
+        hit: &RayIntersect,
+        bg_color: Vec<u8>,
+        object: &PolygonMesh,
+    ) -> Vec<f32> {
+        let mut color = vec![0.0, 0.0, 0.0];
+        let s = -self.direction;
+        let n = hit.surface_normal;
+
+        let reflected_dir = Self::reflected_ray(&s, &n);
+        let refracted_dir = Self::refracted_ray(&self.direction, &n);
+
+        let mut refracted_origin = hit.intersection_point + BIAS * n;
+        if refracted_dir.dot(&n) < 0.0 {
+            refracted_origin = hit.intersection_point - BIAS * n;
+        }
+
+        let mut reflected_origin = hit.intersection_point + BIAS * n;
+        if reflected_dir.dot(&n) < 0.0 {
+            reflected_origin = hit.intersection_point - BIAS * n;
+        }
+
+        let mut reflected_ray = Ray::new(reflected_origin, reflected_dir.normalize());
+        reflected_ray.differentials.d_o = None;
+
+        let mut refracted_ray = Ray::new(refracted_origin, refracted_dir.normalize());
+        refracted_ray.differentials.d_o = None;
+
+        reflected_ray.depth = self.depth + 1;
+        refracted_ray.depth = self.depth + 1;
+
+        let reflected_d_dir = self.reflected_differentials(&n);
+        let refracted_d_dir = self.refracted_differentials(&n, &refracted_dir.normalize());
+
+        let reflected_differentials = RayDifferentials::new(
+            reflected_d_dir,
+            None,
+            reflected_dir,
+            self.differentials.du.clone(),
+            self.differentials.dv.clone(),
+            self.differentials.e1.clone(),
+            self.differentials.e2.clone(),
+        );
+        let refracted_differentials = RayDifferentials::new(
+            refracted_d_dir,
+            None,
+            refracted_dir,
+            self.differentials.du.clone(),
+            self.differentials.dv.clone(),
+            self.differentials.e1.clone(),
+            self.differentials.e2.clone(),
+        );
+
+        reflected_ray.differentials = reflected_differentials;
+        refracted_ray.differentials = refracted_differentials;
+
+
+        if self.depth < max_depth {
+            if object.ks[0] != 0.0 || object.ks[1] != 0.0 || object.ks[2] != 0.0 {
+                let (reflected_color, reflected_hit) = Ray::cast(
+                    &mut reflected_ray,
+                    objects,
+                    lights,
+                    max_depth,
+                    Some(&hit),
+                    bg_color.clone(),
+                );
+                if reflected_hit {
+                    color[0] += object.ks[0] * reflected_color[0];
+                    color[1] += object.ks[1] * reflected_color[1];
+                    color[2] += object.ks[2] * reflected_color[2];
+                }
+            }
+
+            if object.kt[0] != 0.0 || object.kt[1] != 0.0 || object.kt[2] != 0.0 {
+                let (refracted_color, refracted_hit) = Ray::cast(
+                    &mut refracted_ray,
+                    objects,
+                    lights,
+                    max_depth,
+                    Some(&hit),
+                    bg_color.clone(),
+                );
+                if refracted_hit {
+                    color[0] += object.kt[0] * refracted_color[0];
+                    color[1] += object.kt[1] * refracted_color[1];
+                    color[2] += object.kt[2] * refracted_color[2];
+                }
+            }
+        }
+        
+        color
+    }
+
     pub fn cast(
         &mut self,
         objects: &PolygonMeshes,
@@ -292,7 +391,6 @@ impl Ray {
         prev_intersection: Option<&RayIntersect>,
         bg_color: Vec<u8>,
     ) -> (Vec<f32>, bool) {
-        let mut color = vec![0.0, 0.0, 0.0];
         let mut is_hit = false;
 
         if let Some((hit, idx)) = self.ray_intersection(objects) {
@@ -303,91 +401,12 @@ impl Ray {
 
             let object_color_srgb = object.color.clone();
             let mut object_color = Texture::srgb_to_linear(&object_color_srgb);
-            
+
             if let Some(color) = hit.texture_color {
                 object_color = Texture::srgb_to_linear(&vec![color[0], color[1], color[2]]);
             }
 
-            let reflected_dir = Self::reflected_ray(&s, &n);
-            let refracted_dir = Self::refracted_ray(&self.direction, &n);
-
-            let mut refracted_origin = hit.intersection_point + BIAS * n;
-            if refracted_dir.dot(&n) < 0.0 {
-                refracted_origin = hit.intersection_point - BIAS * n;
-            }
-
-            let mut reflected_origin = hit.intersection_point + BIAS * n;
-            if reflected_dir.dot(&n) < 0.0 {
-                reflected_origin = hit.intersection_point - BIAS * n;
-            }
-
-            let mut reflected_ray = Ray::new(reflected_origin, reflected_dir.normalize());
-            reflected_ray.differentials.d_o = None;
-
-            let mut refracted_ray = Ray::new(refracted_origin, refracted_dir.normalize());
-            refracted_ray.differentials.d_o = None;
-
-            reflected_ray.depth = self.depth + 1;
-            refracted_ray.depth = self.depth + 1;
-
-            let reflected_d_dir = self.reflected_differentials(&n);
-            let refracted_d_dir = self.refracted_differentials(&n, &refracted_dir.normalize());
-
-            let reflected_differentials = RayDifferentials::new(
-                reflected_d_dir,
-                None,
-                reflected_dir,
-                self.differentials.du.clone(),
-                self.differentials.dv.clone(),
-                self.differentials.e1.clone(),
-                self.differentials.e2.clone(),
-            );
-            let refracted_differentials = RayDifferentials::new(
-                refracted_d_dir,
-                None,
-                refracted_dir,
-                self.differentials.du.clone(),
-                self.differentials.dv.clone(),
-                self.differentials.e1.clone(),
-                self.differentials.e2.clone(),
-            );
-
-            reflected_ray.differentials = reflected_differentials;
-            refracted_ray.differentials = refracted_differentials;
-
-            if self.depth < max_depth {
-                if object.ks[0] != 0.0 || object.ks[1] != 0.0 || object.ks[2] != 0.0 {
-                    let (reflected_color, reflected_hit) = Ray::cast(
-                        &mut reflected_ray,
-                        objects,
-                        lights,
-                        max_depth,
-                        Some(&hit),
-                        bg_color.clone(),
-                    );
-                    if reflected_hit {
-                        color[0] += object.ks[0] * reflected_color[0];
-                        color[1] += object.ks[1] * reflected_color[1];
-                        color[2] += object.ks[2] * reflected_color[2];
-                    }
-                }
-
-                if object.kt[0] != 0.0 || object.kt[1] != 0.0 || object.kt[2] != 0.0 {
-                    let (refracted_color, refracted_hit) = Ray::cast(
-                        &mut refracted_ray,
-                        objects,
-                        lights,
-                        max_depth,
-                        Some(&hit),
-                        bg_color.clone(),
-                    );
-                    if refracted_hit {
-                        color[0] += object.kt[0] * refracted_color[0];
-                        color[1] += object.kt[1] * refracted_color[1];
-                        color[2] += object.kt[2] * refracted_color[2];
-                    }
-                }
-            }
+            let mut color = self.secondary_rays(objects, lights, max_depth, &hit, bg_color, &object);
 
             let mut color_r = 0.0;
             let mut color_g = 0.0;

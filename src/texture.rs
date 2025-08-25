@@ -4,6 +4,8 @@ use egui::{Color32, ColorImage};
 use image::{ImageBuffer, ImageReader, Rgba};
 use nalgebra::{DMatrix, Vector3};
 
+const KERNEL_RADIUS: i32 = 2;
+const SIGMA: f32 = 0.5;
 
 #[derive(Clone, Debug)]
 pub struct Texture {
@@ -67,13 +69,12 @@ impl Texture {
         Self::save_color_image(&image, &format!("{dest_dir}/{file_name}_{mip_level}.png")).unwrap();
         images.push(image.clone());
         mip_level += 1;
-
-        let radius = 2;
-        let kernel = Self::kernel(radius, 0.5);
+        
+        let kernel = Self::kernel(KERNEL_RADIUS, SIGMA);
         let mut buff_image = image.clone();
 
         while buff_image.width() != 1 || buff_image.height() != 1 {
-            let blur_image = Self::image_blur(&buff_image, &kernel, radius, is_normals);
+            let blur_image = Self::image_blur(&buff_image, &kernel, KERNEL_RADIUS, is_normals);
             buff_image = Self::image_downsampling(&blur_image, is_normals);
 
             Self::save_color_image(&buff_image, &format!("{dest_dir}/{file_name}_{mip_level}.png")).unwrap();
