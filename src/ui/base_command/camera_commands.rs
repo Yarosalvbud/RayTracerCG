@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
 use crate::ui::errors::UiError;
@@ -64,5 +64,44 @@ impl<'a> RotateCameraCommand<'a> {
             rotation,
             controller
         }
+    }
+}
+
+
+pub struct FovCameraPosition<'a>{
+    position: &'a mut Point3<f32>,
+    controller: &'a mut Controller,
+}
+
+impl<'a> Command for FovCameraPosition<'a> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.camera_position(self.position);
+        
+        Ok(())
+    }
+}
+
+impl<'a> FovCameraPosition<'a> {
+    pub fn new(position: &'a mut Point3<f32>, controller: &'a mut Controller) -> FovCameraPosition<'a> {
+        FovCameraPosition {position, controller}
+    }
+}
+
+pub struct FovCameraTarget<'a>{
+    target: &'a mut Point3<f32>,
+    controller: &'a mut Controller,
+}
+
+impl<'a> Command for FovCameraTarget<'a> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.camera_target(self.target);
+        
+        Ok(())
+    }
+}
+
+impl<'a> FovCameraTarget<'a> {
+    pub fn new(target: &'a mut Point3<f32>, controller: &'a mut Controller) -> FovCameraTarget<'a> {
+        FovCameraTarget{target, controller}
     }
 }

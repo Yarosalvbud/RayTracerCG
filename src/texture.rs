@@ -339,18 +339,18 @@ impl Texture {
     }
 
     pub fn trilinear_interpolation(&self, x: f32, y: f32, mip_level: f32, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32{
-        let level_first = mip_level.floor() as usize;
-        let level_second = mip_level.ceil() as usize;
-        let rm = mip_level.fract();
+         let level_first = mip_level.floor() as usize;
+         let level_second = mip_level.ceil() as usize;
+         let rm = mip_level.fract();
 
-        if level_first == level_second{
-            return self.sample(x, y, level_first, interpolator);
-        }
+         if level_first == level_second{
+             return self.sample(x, y, level_first, interpolator);
+         }
 
-        let first_color = self.sample(x, y, level_first, interpolator);
-        let second_color = self.sample(x, y, level_second, interpolator);
+         let first_color = self.sample(x, y, level_first, interpolator);
+         let second_color = self.sample(x, y, level_second, interpolator);
 
-        Self::get_color(&first_color, &second_color, rm)
+         Self::get_color(&first_color, &second_color, rm)
     }
 
     pub fn srgb_to_linear(color: &Vec<u8>) -> Vec<f32>{

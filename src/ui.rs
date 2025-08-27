@@ -1,8 +1,6 @@
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
-use crate::ui::base_command::camera_commands::{
-    ChangeCameraFovCommand, MoveCameraCommand, RotateCameraCommand,
-};
+use crate::ui::base_command::camera_commands::{ChangeCameraFovCommand, FovCameraPosition, FovCameraTarget, MoveCameraCommand, RotateCameraCommand};
 use crate::ui::base_command::light_commands::{AddLightCommand, ChangeBackgroundColorCommand, ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommmand, ChangeLightIntensityCommand, ChangeLuminosityCommand, MoveLightCommand};
 use crate::ui::base_command::object_commands::{
     LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand,
@@ -18,6 +16,7 @@ use crate::ui::object_load_input::{ObjectProperties, list_files_from_dir};
 use crate::ui::select_input::{parse_fov, parse_id};
 use eframe::{Frame, egui};
 use egui::{Color32, ColorImage, Context, Image, Slider, Vec2};
+use nalgebra::Point3;
 
 mod base_command;
 mod camera_input;
@@ -945,6 +944,25 @@ impl App {
         ui.separator();
     }
 
+    fn show_camera_position(&mut self, ui: &mut egui::Ui) {
+        let mut origin = Point3::new(0.0, 0.0, 0.0);
+        let mut target = Point3::new(0.0, 0.0, 0.0);
+
+        let mut origin_command = FovCameraPosition::new(&mut origin, &mut self.controller);
+        origin_command.execute().expect("");
+
+        let mut target_command = FovCameraTarget::new(&mut target, &mut self.controller);
+        target_command.execute().expect("");
+
+        ui.label("Позиция камеры:");
+        ui.label(format!("x: {:.2} y: {:.2} z: {:.2}", origin.x, origin.y, origin.z));
+        ui.separator();
+
+        ui.label("Направление камеры:");
+        ui.label(format!("x: {:.2} y: {:.2} z: {:.2}", target.x, target.y, target.z));
+        ui.separator();
+    }
+
     fn show_error(&mut self, ctx: &Context) {
         egui::Window::new("Ошибка")
             .open(&mut self.show_error)
@@ -988,6 +1006,7 @@ impl App {
         self.apply_camera_move(ui, ctx);
         self.fov_input(ui);
         self.change_fov(ui, ctx);
+        self.show_camera_position(ui);
     }
 
     fn draw_light_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {

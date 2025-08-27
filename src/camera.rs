@@ -62,4 +62,12 @@ impl FovCamera {
     pub fn change_fov(&mut self, fov: f32) {
         self.fov = fov;
     }
+    
+    pub fn camera_position(&self) -> Point3<f32> {
+        self.origin 
+    }
+    
+    pub fn camera_target(&self) -> Point3<f32> {
+        self.target
+    }
 }

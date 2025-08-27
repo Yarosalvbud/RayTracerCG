@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use crate::light::DistantLight;
 use crate::ui::errors::UiError;
 
@@ -66,5 +66,15 @@ impl Lights{
     
     pub fn new_light(&mut self){
         self.lights.push(DistantLight::default());
+    }
+
+    pub fn lights_positions(&self)->Vec<Point3<f32>>{
+        let mut positions: Vec<Point3<f32>> = Vec::new();
+
+        for light in self.lights.iter(){
+            positions.push(light.origin);
+        }
+
+        positions
     }
 }

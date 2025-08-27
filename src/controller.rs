@@ -5,7 +5,7 @@ use crate::ray_tracer::Ray;
 use crate::ui::errors::UiError;
 use eframe::epaint::Color32;
 use egui::ColorImage;
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use crate::light::lights::Lights;
 
 #[derive(Clone, Debug)]
@@ -232,5 +232,17 @@ impl Controller {
         self.meshes.set_normal_map(id, object_normals)?;
 
         Ok(())
+    }
+
+    pub fn lights_positions(&self) -> Vec<Point3<f32>> {
+        self.lights.lights_positions()
+    }
+
+    pub fn camera_position(&self, position: &mut Point3<f32>){
+        *position = self.fov_camera.camera_position();
+    }
+
+    pub fn camera_target(&self, target: &mut Point3<f32>){
+        *target = self.fov_camera.camera_target()
     }
 }
