@@ -10,6 +10,7 @@ pub struct LightProperties {
     pub background_const: String,
     pub light_translation: UserMove,
     pub light_color: Color32,
+    pub bg_color: Color32,
 }
 
 impl Default for LightProperties {
@@ -20,6 +21,7 @@ impl Default for LightProperties {
             background_const: String::new(),
             light_translation: UserMove::default(),
             light_color: Color32::WHITE,
+            bg_color: Color32::WHITE,
         }
     }
 }

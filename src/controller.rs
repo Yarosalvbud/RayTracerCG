@@ -1,5 +1,4 @@
 use crate::camera::FovCamera;
-use crate::light::DistantLight;
 use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
 use crate::polygon::polygon_mesh_builder::PolygonMeshBuilder;
 use crate::ray_tracer::Ray;
@@ -7,11 +6,12 @@ use crate::ui::errors::UiError;
 use eframe::epaint::Color32;
 use egui::ColorImage;
 use nalgebra::Vector3;
+use crate::light::lights::Lights;
 
 #[derive(Clone, Debug)]
 pub struct Controller {
     meshes: PolygonMeshes,
-    lights: Vec<DistantLight>,
+    lights: Lights,
     fov_camera: FovCamera,
 }
 
@@ -62,14 +62,14 @@ impl Default for Controller {
         let mut camera = FovCamera::default();
         camera.translate(&Vector3::new(7.35, -6.92, -4.95));
         camera.rotate(&Vector3::new(-43.0, 120.0, 0.0));
-
-        let mut light = DistantLight::default();
-        light.translate(&Vector3::new(4.07, -1.0, 3.9));
-
-
+        
+        let mut lights = Lights::default();
+        lights.new_light();
+        lights.translate(&Vector3::new(4.07, -1.0, 3.9), 0);
+        
         Controller {
             meshes,
-            lights: vec![light],
+            lights,
             fov_camera: camera,
         }
     }
@@ -124,12 +124,14 @@ impl Controller {
         self.fov_camera.change_fov(fov);
     }
 
-    pub fn change_light_intensity(&mut self, light_intensity: f32) {
-        self.lights[0].change_light_intensity(light_intensity);
+    pub fn change_light_intensity(&mut self, light_intensity: f32, id: usize)-> Result<(), UiError> {
+        self.lights.change_light_intensity(light_intensity, id)?;
+        
+        Ok(())
     }
 
-    pub fn change_light_back_intensity(&mut self, intensity: f32) {
-        self.lights[0].change_light_back_intensity(intensity);
+    pub fn change_light_back_intensity(&mut self, intensity: f32){
+        self.lights.change_light_back_intensity(intensity);
     }
     
     pub fn change_object_luminosity(&mut self, id: usize, luminosity: i32)->Result<(),UiError> {
@@ -143,15 +145,27 @@ impl Controller {
     }
 
     pub fn change_back_const(&mut self, ka: f32) {
-        self.lights[0].change_ka(ka);
+        self.lights.change_ka(ka);
     }
 
-    pub fn move_light(&mut self, translation: &Vector3<f32>) {
-        self.lights[0].translate(translation);
+    pub fn move_light(&mut self, translation: &Vector3<f32>, id: usize)-> Result<(),UiError> {
+        self.lights.translate(translation, id)?;
+        
+        Ok(())
     }
 
-    pub fn change_light_color(&mut self, color: &Vec<u8>) {
-        self.lights[0].change_color(color.clone());
+    pub fn change_light_color(&mut self, color: &Vec<u8>, id: usize)-> Result<(),UiError> {
+        self.lights.change_color(color.clone(), id)?;
+        
+        Ok(())
+    }
+    
+    pub fn add_light(&mut self){
+        self.lights.new_light();
+    }
+    
+    pub fn change_bg_color(&mut self, color: &Vec<u8>) {
+        self.lights.change_light_back_color(color.clone());
     }
 
     pub fn render(&mut self, image: &mut ColorImage, bg_color: Color32) {

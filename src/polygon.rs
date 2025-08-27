@@ -126,30 +126,14 @@ impl Polygon {
             (normal[0] as f32 / 255.0) * 2.0 - 1.0,
             (normal[1] as f32 / 255.0) * 2.0 - 1.0,
             (normal[2] as f32 / 255.0) * 2.0 - 1.0,
-        );
+        ).normalize();
 
         (self.tbn.as_ref() * poly_normal).normalize()
     }
 
     pub fn normal_mapping(&self, ray: &mut Ray, texture: &Texture, point: &Point2<f32>, mip_level: f32) -> Vector3<f32> {
-        let image_size = texture.resolution();
-        let du = 1.0 / (image_size.0 as f32);
-        let dv = 1.0 / (image_size.1 as f32);
-
         let normal = self.sample_normal(texture, point, mip_level);
-        let shifted_right = self.sample_normal(texture, &Point2::new(point.x + du, point.y), mip_level);
-        let shifted_left = self.sample_normal(texture, &Point2::new(point.x - du, point.y), mip_level);
-
-        let shifted_up = self.sample_normal(texture, &Point2::new(point.x, point.y + dv), mip_level);
-        let shifted_down = self.sample_normal(texture, &Point2::new(point.x, point.y - dv), mip_level);
-
-        let dn_du = (shifted_right - shifted_left) * 0.5;
-        let dn_dv = (shifted_up - shifted_down) * 0.5;
-
-        let dn_dx = dn_du * ray.differentials.d_s.0 + dn_dv * ray.differentials.d_t.0;
-        let dn_dy = dn_du * ray.differentials.d_s.1 + dn_dv * ray.differentials.d_t.1;
-
-        ray.differentials.dn = Differentials(Vector3::zeros(), Vector3::zeros()); //todo(Что с этим делать?)
+        ray.differentials.dn = Differentials(Vector3::zeros(), Vector3::zeros());
 
         normal
     }
@@ -169,7 +153,7 @@ impl Polygon {
         ray.differentials.e1 = e1.clone();
         ray.differentials.e2 = e2.clone();
 
-        let k = 1.0 / e1.cross(&e2).dot(&ray.differentials.non_norm_direction);
+        let k = 1.0 / (e1.cross(&e2).dot(&ray.differentials.non_norm_direction) + f32::EPSILON);
         let c_u = e2.cross(&ray.differentials.non_norm_direction);
         let c_v = ray.differentials.non_norm_direction.cross(&e1);
 

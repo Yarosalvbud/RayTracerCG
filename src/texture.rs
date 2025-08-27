@@ -118,9 +118,8 @@ impl Texture {
                         let px = x + dx;
                         let py = y + dy;
                         if px < image.width() && py < image.height() {
+                            let color_texture = image[(px, py)];
                             if is_normals {
-                                let color_texture = image[(px, py)];
-
                                 let n = Vector3::new(
                                     (color_texture.r() as f32 / 255.0) * 2.0 - 1.0,
                                     (color_texture.g() as f32 / 255.0) * 2.0 - 1.0,
@@ -128,7 +127,6 @@ impl Texture {
                                 ).normalize();
                                 normals_sum += n;
                             } else {
-                                let color_texture = image[(px, py)];
                                 let color_linear = Self::srgb_to_linear(&vec![color_texture[0], color_texture[1], color_texture[2]]);
 
                                 color_sum[0] += color_linear[0];

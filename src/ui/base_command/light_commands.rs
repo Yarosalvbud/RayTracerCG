@@ -5,19 +5,19 @@ use crate::ui::errors::UiError;
 
 pub struct ChangeLightIntensityCommand<'a> {
     intensity: f32,
+    id: usize,
     controller: &'a mut Controller,
 }
 
 impl Command for ChangeLightIntensityCommand<'_> {
     fn execute(&mut self) -> Result<(), UiError> {
-        self.controller.change_light_intensity(self.intensity);
-        Ok(())
+        self.controller.change_light_intensity(self.intensity, self.id)
     }
 }
 
 impl<'a> ChangeLightIntensityCommand<'a> {
-    pub fn new(intensity: f32, controller: &'a mut Controller) -> ChangeLightIntensityCommand<'a> {
-        ChangeLightIntensityCommand { controller, intensity }
+    pub fn new(intensity: f32, id: usize, controller: &'a mut Controller) -> ChangeLightIntensityCommand<'a> {
+        ChangeLightIntensityCommand { controller, id, intensity }
     }
 }
 
@@ -59,37 +59,37 @@ impl<'a> ChangeLightConstCommmand<'a> {
 
 pub struct ChangeLightColorCommand<'a> {
     color: Vec<u8>,
+    id: usize,
     controller: &'a mut Controller,
 }
 
 impl Command for ChangeLightColorCommand<'_> {
     fn execute(&mut self) -> Result<(), UiError> {
-        self.controller.change_light_color(&self.color);
-        Ok(())
+        self.controller.change_light_color(&self.color, self.id)
     }
 }
 
 impl<'a> ChangeLightColorCommand<'a> {
-    pub fn new(color: Vec<u8>, controller: &'a mut Controller) -> ChangeLightColorCommand<'a> {
-        ChangeLightColorCommand { controller, color }
+    pub fn new(color: Vec<u8>, id: usize, controller: &'a mut Controller) -> ChangeLightColorCommand<'a> {
+        ChangeLightColorCommand { controller, id, color }
     }
 }
 
 pub struct MoveLightCommand<'a> {
     translation: Vector3<f32>,
+    id: usize,
     controller: &'a mut Controller,
 }
 
 impl Command for MoveLightCommand<'_> {
     fn execute(&mut self) -> Result<(), UiError> {
-        self.controller.move_light(&self.translation);
-        Ok(())
+        self.controller.move_light(&self.translation, self.id)
     }
 }
 
 impl<'a> MoveLightCommand<'a> {
-    pub fn new(translation: Vector3<f32>, controller: &'a mut Controller) -> MoveLightCommand<'a> {
-        MoveLightCommand { controller, translation }
+    pub fn new(translation: Vector3<f32>, id: usize, controller: &'a mut Controller) -> MoveLightCommand<'a> {
+        MoveLightCommand { controller, translation, id }
     }
 }
 
@@ -108,5 +108,42 @@ impl Command for ChangeLuminosityCommand<'_> {
 impl<'a> ChangeLuminosityCommand<'a> {
     pub fn new(id: usize, luminosity: i32, controller: &'a mut Controller) -> ChangeLuminosityCommand<'a> {
         ChangeLuminosityCommand { id, luminosity, controller }
+    }
+}
+
+pub struct AddLightCommand<'a> {
+    controller: &'a mut Controller,
+}
+
+impl Command for AddLightCommand<'_> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.add_light();
+
+        Ok(())
+    }
+}
+
+impl<'a> AddLightCommand<'a> {
+    pub fn new(controller: &'a mut Controller) -> AddLightCommand<'a> {
+        AddLightCommand { controller }
+    }
+}
+
+pub struct ChangeBackgroundColorCommand<'a> {
+    color: Vec<u8>,
+    controller: &'a mut Controller,
+}
+
+impl Command for ChangeBackgroundColorCommand<'_> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.change_bg_color(&self.color);
+
+        Ok(())
+    }
+}
+
+impl<'a> ChangeBackgroundColorCommand<'a> {
+    pub fn new(color: Vec<u8>, controller: &'a mut Controller) -> ChangeBackgroundColorCommand<'a> {
+        ChangeBackgroundColorCommand { color, controller }
     }
 }
