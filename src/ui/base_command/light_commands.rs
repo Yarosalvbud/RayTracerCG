@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
 use crate::ui::errors::UiError;
@@ -39,21 +39,21 @@ impl<'a> ChangeLightBackIntensityCommand<'a> {
     }
 }
 
-pub struct ChangeLightConstCommmand<'a> {
+pub struct ChangeLightConstCommand<'a> {
     ka: f32,
     controller: &'a mut Controller,
 }
 
-impl Command for ChangeLightConstCommmand<'_> {
+impl Command for ChangeLightConstCommand<'_> {
     fn execute(&mut self) -> Result<(), UiError> {
         self.controller.change_back_const(self.ka);
         Ok(())
     }
 }
 
-impl<'a> ChangeLightConstCommmand<'a> {
-    pub fn new(ka: f32, controller: &'a mut Controller) -> ChangeLightConstCommmand<'a> {
-        ChangeLightConstCommmand { controller, ka }
+impl<'a> ChangeLightConstCommand<'a> {
+    pub fn new(ka: f32, controller: &'a mut Controller) -> ChangeLightConstCommand<'a> {
+        ChangeLightConstCommand { controller, ka }
     }
 }
 
@@ -145,5 +145,23 @@ impl Command for ChangeBackgroundColorCommand<'_> {
 impl<'a> ChangeBackgroundColorCommand<'a> {
     pub fn new(color: Vec<u8>, controller: &'a mut Controller) -> ChangeBackgroundColorCommand<'a> {
         ChangeBackgroundColorCommand { color, controller }
+    }
+}
+
+pub struct LightsPositionsCommand<'a> {
+    positions: &'a mut Vec<Point3<f32>>,
+    controller: &'a mut Controller,
+}
+
+impl Command for LightsPositionsCommand<'_> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.lights_positions(self.positions);
+        Ok(())
+    }
+}
+
+impl<'a> LightsPositionsCommand<'a> {
+    pub fn new(positions: &'a mut Vec<Point3<f32>>, controller: &'a mut Controller) -> LightsPositionsCommand<'a> {
+        LightsPositionsCommand { positions, controller }
     }
 }

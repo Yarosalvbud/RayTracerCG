@@ -108,7 +108,7 @@ impl Controller {
             return Err(UiError::ObjectNotFoundError);
         }
 
-        self.meshes.remove(id);
+        self.meshes.remove_object(id);
         Ok(())
     }
 
@@ -234,8 +234,8 @@ impl Controller {
         Ok(())
     }
 
-    pub fn lights_positions(&self) -> Vec<Point3<f32>> {
-        self.lights.lights_positions()
+    pub fn lights_positions(&self, positions: &mut Vec<Point3<f32>>){
+        *positions = self.lights.lights_positions();
     }
 
     pub fn camera_position(&self, position: &mut Point3<f32>){
@@ -245,4 +245,5 @@ impl Controller {
     pub fn camera_target(&self, target: &mut Point3<f32>){
         *target = self.fov_camera.camera_target()
     }
+
 }

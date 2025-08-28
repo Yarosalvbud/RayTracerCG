@@ -89,7 +89,7 @@ impl PolygonMeshes{
         self.meshes[id].set_color(color);
     }
 
-    pub fn remove_objects(&mut self, id: usize){
+    pub fn remove_object(&mut self, id: usize){
         self.meshes.remove(id);
     }
 

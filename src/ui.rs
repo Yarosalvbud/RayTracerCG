@@ -1,7 +1,7 @@
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
 use crate::ui::base_command::camera_commands::{ChangeCameraFovCommand, FovCameraPosition, FovCameraTarget, MoveCameraCommand, RotateCameraCommand};
-use crate::ui::base_command::light_commands::{AddLightCommand, ChangeBackgroundColorCommand, ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommmand, ChangeLightIntensityCommand, ChangeLuminosityCommand, MoveLightCommand};
+use crate::ui::base_command::light_commands::{AddLightCommand, ChangeBackgroundColorCommand, ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommand, ChangeLightIntensityCommand, ChangeLuminosityCommand, LightsPositionsCommand, MoveLightCommand};
 use crate::ui::base_command::object_commands::{
     LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand,
     TexturePropertiesCommand, TranslationCommand,
@@ -574,7 +574,7 @@ impl App {
                 self.error_message = message.to_string();
             } else {
                 let mut change_ka_command =
-                    ChangeLightConstCommmand::new(ka.unwrap(), &mut self.controller);
+                    ChangeLightConstCommand::new(ka.unwrap(), &mut self.controller);
                 change_ka_command.execute().expect("");
                 self.render();
             }
@@ -768,6 +768,23 @@ impl App {
             add_light_command.execute().expect("");
             self.render();
         }
+    }
+
+    fn lights_positions(&mut self, ui: &mut egui::Ui){
+        ui.label("Позиции источников света");
+
+        let mut positions: Vec<Point3<f32>> = Vec::new();
+        let mut lights_positions = LightsPositionsCommand::new(&mut positions, &mut self.controller);
+        lights_positions.execute().expect("");
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (idx, position) in positions.iter().enumerate() {
+                ui.horizontal(|ui| {
+                   ui.label(format!("{idx}. x: {:.2}, y: {:.2}, z: {:.2}", position.x, position.y, position.z));
+                });
+            }
+        });
+
     }
 
     fn apply_camera_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -1019,6 +1036,7 @@ impl App {
         self.change_light_color(ui, ctx);
         self.change_light_bg_color(ui);
         self.add_light(ui);
+        self.lights_positions(ui);
     }
 
     fn draw_object_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
