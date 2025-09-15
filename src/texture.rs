@@ -273,12 +273,15 @@ impl Texture {
         let mut x = x as usize;
         let mut y = y as usize;
 
-        if x >= self.images[mip_level].width(){
-            x = 0;
+        let w = self.images[mip_level].width();
+        let h = self.images[mip_level].height();
+
+        if x >= w{
+            x = x % w;
         }
 
-        if y >= self.images[mip_level].height(){
-            y = 0;
+        if y >= h{
+            y = y % h;
         }
 
         (x, y)
@@ -316,26 +319,7 @@ impl Texture {
     }
 
     pub fn sample(&self, x: f32, y: f32, mip_level: usize, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32 {
-        let mut x = x;
-        let mut y = y;
-
-        if x > 1.0 {
-            x = x.fract();
-        }
-
-        if  y > 1.0 {
-            y = y.fract();
-        }
-
-        if x < 0.0{
-            x = x.fract() + 1.0;
-        }
-
-        if y < 0.0{
-            y = y.fract() + 1.0;
-        }
-
-        self.bilinear_interpolation(x, y, mip_level, interpolator)
+        self.bilinear_interpolation(x.rem_euclid(1.0), y.rem_euclid(1.0), mip_level, interpolator)
     }
 
     pub fn trilinear_interpolation(&self, x: f32, y: f32, mip_level: f32, interpolator: fn(&Color32, &Color32, f32) -> Color32) -> Color32{
@@ -350,7 +334,7 @@ impl Texture {
          let first_color = self.sample(x, y, level_first, interpolator);
          let second_color = self.sample(x, y, level_second, interpolator);
 
-         Self::get_color(&first_color, &second_color, rm)
+         interpolator(&first_color, &second_color, rm)
     }
 
     pub fn srgb_to_linear(color: &Vec<u8>) -> Vec<f32>{
