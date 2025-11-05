@@ -99,7 +99,6 @@ pub struct TexturePropertiesCommand<'a> {
     id: usize,
     object_texture: &'a Option<String>,
     object_normals: &'a Option<String>,
-    object_uv: String,
     controller: &'a mut Controller,
 }
 
@@ -109,7 +108,6 @@ impl Command for TexturePropertiesCommand<'_> {
             self.id,
             self.object_texture.clone(),
             self.object_normals.clone(),
-            self.object_uv.clone(),
         )
     }
 }
@@ -119,14 +117,12 @@ impl<'a> TexturePropertiesCommand<'a> {
         id: usize,
         object_texture: &'a Option<String>,
         object_normals: &'a Option<String>,
-        object_uv: String,
         controller: &'a mut Controller,
     ) -> TexturePropertiesCommand<'a> {
         TexturePropertiesCommand {
             id,
             object_texture,
             object_normals,
-            object_uv,
             controller,
         }
     }

@@ -1,7 +1,11 @@
 use crate::controller::Controller;
 use crate::ui::base_command::Command;
-use crate::ui::base_command::camera_commands::{ChangeCameraFovCommand, FovCameraPosition, FovCameraTarget, MoveCameraCommand, RotateCameraCommand};
-use crate::ui::base_command::light_commands::{AddLightCommand, ChangeBackgroundColorCommand, ChangeLightBackIntensityCommand, ChangeLightColorCommand, ChangeLightConstCommand, ChangeLightIntensityCommand, ChangeLuminosityCommand, LightsPositionsCommand, MoveLightCommand};
+use crate::ui::base_command::camera_commands::{AddCamera, ChangeActiveCamera, ChangeCameraFovCommand, FovCameraPosition, FovCameraTarget, MoveCameraCommand, RotateCameraCommand};
+use crate::ui::base_command::light_commands::{
+    AddLightCommand, ChangeBackgroundColorCommand, ChangeLightBackIntensityCommand,
+    ChangeLightColorCommand, ChangeLightConstCommand, ChangeLightIntensityCommand,
+    ChangeLuminosityCommand, LightsPositionsCommand, MoveLightCommand,
+};
 use crate::ui::base_command::object_commands::{
     LightPropertiesCommand, LoadCommand, RemoveObjectCommand, RotateCommand, ScaleCommand,
     TexturePropertiesCommand, TranslationCommand,
@@ -50,6 +54,8 @@ pub struct App {
     camera_properties: CameraCommand,
     light_properties: LightProperties,
     object_light_properties: ObjectLightProperties,
+    object_list: Vec<String>,
+    scene_choice: String,
 }
 
 impl Default for App {
@@ -66,6 +72,8 @@ impl Default for App {
             camera_properties: CameraCommand::default(),
             light_properties: LightProperties::default(),
             object_light_properties: ObjectLightProperties::default(),
+            object_list: Vec::new(),
+            scene_choice: "Не выбрано".to_string(),
         }
     }
 }
@@ -106,9 +114,9 @@ impl App {
 
     fn read_object(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let stl_choice = self.object_properties.stl_data.clone();
-        let stl_dir = std::env::var("STL_DIR").expect("STL_DIR must be set");
+        let stl_dir = std::env::var("UV_DIR").expect("UV_DIR must be set");
 
-        let mut stl = self.object_choice(ui, &stl_dir, "stl", "Объект", &stl_choice);
+        let mut stl = self.object_choice(ui, &stl_dir, "obj", "Объект", &stl_choice);
         if let Some(value) = stl.clone() {
             self.object_properties.stl_data = value.clone();
             stl = Some(format!("{}//{}", stl_dir, value))
@@ -130,7 +138,53 @@ impl App {
                 self.error_message = err.to_string();
                 self.show_error = true;
             } else {
-                self.render();
+                if self.object_properties.stl_data != "Не выбрано" {
+                    self.object_list
+                        .push(self.object_properties.stl_data.clone());
+                }
+                self.render(ctx);
+            }
+        }
+
+        if self.show_error {
+            self.show_error(ctx)
+        }
+        ui.separator();
+    }
+
+    fn read_scene(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        let scene_choice = self.scene_choice.clone();
+        let scene_dir = std::env::var("SCENE_DIR").expect("SCENE DIR must be set");
+
+        let mut scene = self.object_choice(ui, &scene_dir, "yml", "Сцена", &scene_choice);
+        if let Some(value) = scene.clone() {
+            self.scene_choice = value.clone();
+            scene = Some(format!("{}//{}", scene_dir, value))
+        } else {
+            self.scene_choice = "Не выбрано".to_string();
+        }
+
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Загрузить сцену"),
+            )
+            .clicked()
+        {
+            let names = self.controller.read_scene(scene);
+
+            if let Err(err) = names {
+                self.error_message = err.to_string();
+                self.show_error = true;
+            } else {
+                if self.scene_choice != "Не выбрано" {
+                    self.object_list.clear();
+                    self.object_list.extend(names.unwrap());
+                }else{
+                    self.object_list.clear();
+                    self.image = ColorImage::new([1920, 1080], vec![Color32::WHITE; 1920 * 1080]);
+                }
+                self.render(ctx);
             }
         }
 
@@ -143,11 +197,9 @@ impl App {
     fn read_object_properties(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let texture_choice = self.object_properties.texture_data.clone();
         let normal_choice = self.object_properties.normal_map.clone();
-        let uv_choice = self.object_properties.uv.clone();
 
         let texture_dir = std::env::var("TEXTURE_DIR").expect("Texture dir must be set");
         let normal_map_dir = std::env::var("NORMAL_MAPS_DIR").expect("NORMAL_MAPS_DIR must be set");
-        let uv_dir = std::env::var("UV_DIR").expect("UV_DIR must be set");
 
         let mut texture = self.object_choice(ui, &texture_dir, "jpg", "Текстура", &texture_choice);
 
@@ -168,15 +220,6 @@ impl App {
             self.object_properties.normal_map = "Не выбрано".to_string();
         }
 
-        let mut uv = self.object_choice(ui, &uv_dir, "obj", "UV Развертка", &uv_choice);
-
-        if let Some(value) = uv.clone() {
-            self.object_properties.uv = value.clone();
-            uv = Some(format!("{}//{}", uv_dir, value));
-        } else {
-            self.object_properties.uv = "Не выбрано".to_string();
-        }
-
         self.id_input(ui);
 
         let id = parse_id(&self.selected_object);
@@ -188,27 +231,18 @@ impl App {
             .clicked()
         {
             if let Ok(id) = id {
-                if let Some(uv) = uv {
-                    let mut add_properties = TexturePropertiesCommand::new(
-                        id,
-                        &texture,
-                        &normal,
-                        uv,
-                        &mut self.controller,
-                    );
+                let mut add_properties =
+                    TexturePropertiesCommand::new(id, &texture, &normal, &mut self.controller);
 
-                    if let Err(message) = add_properties.execute() {
-                        self.error_message = message.to_string();
-                        self.show_error = true;
-                    } else {
-                        self.render();
-                    }
-                } else {
-                    self.error_message = UiError::NoUnwrapError.to_string();
+                if let Err(message) = add_properties.execute() {
+                    self.error_message = message.to_string();
                     self.show_error = true;
+                } else {
+                    self.render(ctx);
                 }
             }
         }
+
         if self.show_error {
             self.show_error(ctx)
         }
@@ -375,7 +409,7 @@ impl App {
 
     fn luminosity_change(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.horizontal(|ui| {
-            ui.label("Коэффициент отражения:");
+            ui.label("Резкость бликов:");
             ui.add_sized(
                 Vec2::new(ui.available_width(), 33.0),
                 egui::TextEdit::singleline(&mut self.object_light_properties.luminosity),
@@ -409,8 +443,8 @@ impl App {
                     if let Err(message) = change_luminosity_command.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
-                    }else{
-                        self.render();
+                    } else {
+                        self.render(ctx);
                     }
                 }
             }
@@ -456,20 +490,23 @@ impl App {
             if let Err(message) = id {
                 self.error_message = message.to_string();
                 self.show_error = true;
-            }else {
+            } else {
                 let id = id.unwrap();
                 if let Err(message) = intensity {
                     self.show_error = true;
                     self.error_message = message.to_string();
                 } else {
-                    let mut light_intensity_command =
-                        ChangeLightIntensityCommand::new(intensity.unwrap(), id, &mut self.controller);
+                    let mut light_intensity_command = ChangeLightIntensityCommand::new(
+                        intensity.unwrap(),
+                        id,
+                        &mut self.controller,
+                    );
 
-                    if let Err(message) = light_intensity_command.execute(){
+                    if let Err(message) = light_intensity_command.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
-                    }else {
-                        self.render();
+                    } else {
+                        self.render(ctx);
                     }
                 }
             }
@@ -508,7 +545,7 @@ impl App {
                 let mut change_back_light_intensity_command =
                     ChangeLightBackIntensityCommand::new(intensity.unwrap(), &mut self.controller);
                 change_back_light_intensity_command.execute().expect("");
-                self.render();
+                self.render(ctx);
             }
         }
 
@@ -576,7 +613,7 @@ impl App {
                 let mut change_ka_command =
                     ChangeLightConstCommand::new(ka.unwrap(), &mut self.controller);
                 change_ka_command.execute().expect("");
-                self.render();
+                self.render(ctx);
             }
         }
 
@@ -602,16 +639,16 @@ impl App {
                 if let Err(message) = id {
                     self.show_error = true;
                     self.error_message = message.to_string();
-                }else {
+                } else {
                     let id = id.unwrap();
                     let mut color_command =
                         ChangeLightColorCommand::new(new_color, id, &mut self.controller);
 
-                    if let Err(message) = color_command.execute(){
+                    if let Err(message) = color_command.execute() {
                         self.show_error = true;
                         self.error_message = message.to_string();
-                    }else {
-                        self.render();
+                    } else {
+                        self.render(ctx);
                     }
                 }
             }
@@ -624,7 +661,7 @@ impl App {
         ui.separator();
     }
 
-    fn change_light_bg_color(&mut self, ui: &mut egui::Ui) {
+    fn change_light_bg_color(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.horizontal(|ui| {
             ui.label("Изменение цвета фонового света:");
 
@@ -639,13 +676,46 @@ impl App {
                     ChangeBackgroundColorCommand::new(new_color, &mut self.controller);
 
                 color_command.execute().expect("");
-                self.render();
-                }
+                self.render(ctx);
+            }
         });
 
         ui.separator();
     }
 
+    fn set_active_camera(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Установить активную камеру"),
+            )
+            .clicked()
+        {
+            let id = parse_id(&self.selected_object);
+
+            if let Err(message) = id {
+                self.show_error = true;
+                self.error_message = message.to_string();
+            }else{
+                let id = id.unwrap();
+
+                let mut set_camera_command = ChangeActiveCamera::new(id, &mut self.controller);
+
+                if let Err(message) = set_camera_command.execute() {
+                    self.show_error = true;
+                    self.error_message = message.to_string();
+                }else{
+                    self.render(ctx);
+                }
+            }
+        }
+
+        if self.show_error {
+            self.show_error(ctx);
+        }
+
+        ui.separator();
+    }
 
     fn apply_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
@@ -700,7 +770,7 @@ impl App {
                         self.show_error = true;
                     }
 
-                    self.render();
+                    self.render(ctx);
                 }
             }
         }
@@ -726,7 +796,7 @@ impl App {
             if let Err(message) = id {
                 self.error_message = message.to_string();
                 self.show_error = true;
-            }else {
+            } else {
                 let id = id.unwrap();
 
                 if move_data.is_err() {
@@ -736,14 +806,17 @@ impl App {
                 }
 
                 if !self.show_error {
-                    let mut move_light_command =
-                        MoveLightCommand::new(move_data.unwrap().move_data, id, &mut self.controller);
+                    let mut move_light_command = MoveLightCommand::new(
+                        move_data.unwrap().move_data,
+                        id,
+                        &mut self.controller,
+                    );
 
-                    if let Err(message) = move_light_command.execute(){
+                    if let Err(message) = move_light_command.execute() {
                         self.error_message = message.to_string();
                         self.show_error = true;
-                    }else {
-                        self.render();
+                    } else {
+                        self.render(ctx);
                     }
                 }
             }
@@ -756,7 +829,7 @@ impl App {
         ui.separator();
     }
 
-    fn add_light(&mut self, ui: &mut egui::Ui){
+    fn add_light(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         if ui
             .add_sized(
                 Vec2::new(ui.available_width(), 33.0),
@@ -766,25 +839,40 @@ impl App {
         {
             let mut add_light_command = AddLightCommand::new(&mut self.controller);
             add_light_command.execute().expect("");
-            self.render();
+            self.render(ctx);
         }
     }
 
-    fn lights_positions(&mut self, ui: &mut egui::Ui){
+    fn lights_positions(&mut self, ui: &mut egui::Ui) {
         ui.label("Позиции источников света");
 
         let mut positions: Vec<Point3<f32>> = Vec::new();
-        let mut lights_positions = LightsPositionsCommand::new(&mut positions, &mut self.controller);
+        let mut lights_positions =
+            LightsPositionsCommand::new(&mut positions, &mut self.controller);
         lights_positions.execute().expect("");
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (idx, position) in positions.iter().enumerate() {
                 ui.horizontal(|ui| {
-                   ui.label(format!("{idx}. x: {:.2}, y: {:.2}, z: {:.2}", position.x, position.y, position.z));
+                    ui.label(format!(
+                        "{idx}. x: {:.2}, y: {:.2}, z: {:.2}",
+                        position.x, position.y, position.z
+                    ));
                 });
             }
         });
+    }
 
+    fn objects_list(&mut self, ui: &mut egui::Ui) {
+        ui.label("Объекты сцены");
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (idx, position) in self.object_list.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{idx}. {position}"));
+                });
+            }
+        });
     }
 
     fn apply_camera_move(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -817,7 +905,7 @@ impl App {
 
                 rotate_camera_command.execute().expect("");
 
-                self.render();
+                self.render(ctx);
             }
         }
 
@@ -846,7 +934,7 @@ impl App {
                     ChangeCameraFovCommand::new(fov.unwrap(), &mut self.controller);
 
                 change_fov_command.execute().expect("");
-                self.render();
+                self.render(ctx);
             }
         }
 
@@ -857,15 +945,16 @@ impl App {
         ui.separator();
     }
 
-    fn change_light_params(&mut self, ui: &mut egui::Ui) {
+    fn change_light_params(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        ui.label("Коэффициент диффузного отражения");
         ui.add(Slider::new(&mut self.object_light_properties.kd[0], 0.0..=1.0).text("kd r"));
         ui.add(Slider::new(&mut self.object_light_properties.kd[1], 0.0..=1.0).text("kd g"));
         ui.add(Slider::new(&mut self.object_light_properties.kd[2], 0.0..=1.0).text("kd b"));
-
+        ui.label("Коэффициент зеркального отражения");
         ui.add(Slider::new(&mut self.object_light_properties.ks[0], 0.0..=1.0).text("ks r"));
         ui.add(Slider::new(&mut self.object_light_properties.ks[1], 0.0..=1.0).text("ks g"));
         ui.add(Slider::new(&mut self.object_light_properties.ks[2], 0.0..=1.0).text("ks b"));
-
+        ui.label("Коэффициент пропускания");
         ui.add(Slider::new(&mut self.object_light_properties.kt[0], 0.0..=1.0).text("kt r"));
         ui.add(Slider::new(&mut self.object_light_properties.kt[1], 0.0..=1.0).text("kt g"));
         ui.add(Slider::new(&mut self.object_light_properties.kt[2], 0.0..=1.0).text("kt b"));
@@ -881,7 +970,7 @@ impl App {
                 .color_edit_button_srgba(&mut self.object_light_properties.background)
                 .changed()
             {
-                self.render();
+                self.render(ctx);
             };
         });
 
@@ -916,7 +1005,7 @@ impl App {
                     self.error_message = message.to_string();
                     self.show_error = true;
                 } else {
-                    self.render();
+                    self.render(ctx);
                 }
             }
         }
@@ -926,6 +1015,18 @@ impl App {
         }
 
         ui.separator();
+    }
+
+    fn add_camera(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .add_sized(
+                Vec2::new(ui.available_width(), 33.0),
+                egui::Button::new("Добавить камеру"),
+            )
+            .clicked(){
+            let mut add_camera_command = AddCamera::new(&mut self.controller);
+            add_camera_command.execute().expect("");
+        }
     }
 
     fn remove_object(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -949,7 +1050,8 @@ impl App {
                     self.error_message = message.to_string();
                     self.show_error = true;
                 } else {
-                    self.render();
+                    self.object_list.remove(id.unwrap());
+                    self.render(ctx);
                 }
             }
         }
@@ -972,11 +1074,17 @@ impl App {
         target_command.execute().expect("");
 
         ui.label("Позиция камеры:");
-        ui.label(format!("x: {:.2} y: {:.2} z: {:.2}", origin.x, origin.y, origin.z));
+        ui.label(format!(
+            "x: {:.2} y: {:.2} z: {:.2}",
+            origin.x, origin.y, origin.z
+        ));
         ui.separator();
 
         ui.label("Направление камеры:");
-        ui.label(format!("x: {:.2} y: {:.2} z: {:.2}", target.x, target.y, target.z));
+        ui.label(format!(
+            "x: {:.2} y: {:.2} z: {:.2}",
+            target.x, target.y, target.z
+        ));
         ui.separator();
     }
 
@@ -990,16 +1098,21 @@ impl App {
             });
     }
 
-    fn render(&mut self) {
+    fn render(&mut self, ctx: &Context) {
         let mut render_command = RenderCommand::new(
             &mut self.image,
             &mut self.controller,
             self.object_light_properties.background,
         );
 
-        render_command
-            .execute()
-            .expect("Ошибка при рендере объекта");
+        if let Err(message) = render_command.execute() {
+            self.error_message = message.to_string();
+            self.show_error = true;
+        }
+
+        if self.show_error {
+            self.show_error(ctx);
+        }
     }
 
     fn show_render(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -1015,14 +1128,18 @@ impl App {
         self.rotation_input(ui);
         self.id_input(ui);
         self.apply_move(ui, ctx);
+        self.objects_list(ui);
     }
 
     fn draw_camera_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+        self.id_input(ui);
+        self.set_active_camera(ui, ctx);
         self.camera_move_input(ui);
         self.camera_rotation_input(ui);
         self.apply_camera_move(ui, ctx);
         self.fov_input(ui);
         self.change_fov(ui, ctx);
+        self.add_camera(ui);
         self.show_camera_position(ui);
     }
 
@@ -1034,24 +1151,27 @@ impl App {
         self.change_light_back_intensity(ui, ctx);
         self.change_light_const(ui, ctx);
         self.change_light_color(ui, ctx);
-        self.change_light_bg_color(ui);
-        self.add_light(ui);
+        self.change_light_bg_color(ui, ctx);
+        self.add_light(ui, ctx);
         self.lights_positions(ui);
     }
 
     fn draw_object_settings_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
-        self.change_light_params(ui);
+        self.change_light_params(ui, ctx);
         self.apply_light_properties_change(ui, ctx);
         self.luminosity_change(ui, ctx);
         self.remove_object(ui, ctx);
+        self.objects_list(ui);
     }
 
     fn draw_load_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.read_object(ui, ctx);
+        self.read_scene(ui, ctx);
     }
 
     fn draw_properties_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         self.read_object_properties(ui, ctx);
+        self.objects_list(ui);
     }
 }
 
@@ -1065,7 +1185,7 @@ impl eframe::App for App {
                 if ui.button("Параметры камеры").clicked() {
                     self.current_panel = PanelSelection::CameraSettings;
                 }
-                if ui.button("Загрузка объекта").clicked() {
+                if ui.button("Загрузка объектов").clicked() {
                     self.current_panel = PanelSelection::LoadObject;
                 }
                 if ui.button("Загрузка текстур").clicked() {

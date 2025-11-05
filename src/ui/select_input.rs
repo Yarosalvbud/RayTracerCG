@@ -26,8 +26,8 @@ pub fn parse_id(id: &str) -> Result<usize, UiError> {
     parse_value(
         id,
         UiError::NumberNotFoundError,
-        |&n: &usize| n >= 0,
-    ).map(|n| n)
+        |&n: &i32| n >= 0,
+    ).map(|n| n as usize)
 }
 
 pub fn parse_fov(fov: &str) -> Result<f32, UiError> {

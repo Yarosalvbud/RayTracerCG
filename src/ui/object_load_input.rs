@@ -5,7 +5,6 @@ pub struct ObjectProperties{
     pub stl_data: String,
     pub texture_data: String,
     pub normal_map: String,
-    pub uv: String,
 }
 
 impl Default for ObjectProperties {
@@ -14,7 +13,6 @@ impl Default for ObjectProperties {
             stl_data: "Не выбрано".to_string(),
             texture_data: "Не выбрано".to_string(),
             normal_map: "Не выбрано".to_string(),
-            uv: "Не выбрано".to_string(),
         }
     }
 }

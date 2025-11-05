@@ -1,3 +1,5 @@
+pub mod cameras;
+
 use nalgebra::{Matrix4, Point3, Vector3};
 
 
@@ -15,9 +17,9 @@ impl Default for FovCamera {
     fn default() -> FovCamera {
         FovCamera {
             origin: Point3::new(0.0, 0.0, 0.0),
-            target: Point3::new(0.0, 0.0, -1.0),
-            world_up: Vector3::new(0.0, 1.0, 0.0),
-            yaw: -90.0,
+            target: Point3::new(0.0, 1.0, 0.0),
+            world_up: Vector3::new(0.0, 0.0, 1.0),
+            yaw: 0.0,
             pitch: 0.0,
             fov: 39.0,
         }
@@ -25,14 +27,25 @@ impl Default for FovCamera {
 }
 
 impl FovCamera {
+    pub fn new(origin: Point3<f32>, target: Point3<f32>, yaw: f32, pitch: f32, fov: f32) -> FovCamera {
+        FovCamera{
+            origin,
+            target,
+            world_up: Vector3::new(0.0, 0.0, 1.0),
+            yaw,
+            pitch, 
+            fov
+        }
+    }
+    
     pub fn translate(&mut self, translation: &Vector3<f32>) {
         let front = (self.target - self.origin).normalize();
         let right = front.cross(&self.world_up).normalize();
         let up = right.cross(&front).normalize();
 
         self.origin += translation.x * right;
-        self.origin += translation.y * up;
-        self.origin += translation.z * front;
+        self.origin += translation.y * front;
+        self.origin += translation.z * up;
     }
 
     pub fn rotate(&mut self, rotation: &Vector3<f32>) {
@@ -44,8 +57,8 @@ impl FovCamera {
         let mut front = Vector3::zeros();
 
         front.x = f32::cos(self.yaw.to_radians()) * f32::cos(self.pitch.to_radians());
-        front.y = f32::sin(self.pitch.to_radians());
-        front.z = f32::sin(self.yaw.to_radians()) * f32::cos(self.pitch.to_radians());
+        front.z = f32::sin(self.pitch.to_radians());
+        front.y = f32::sin(self.yaw.to_radians()) * f32::cos(self.pitch.to_radians());
         front = front.normalize();
         
         self.target = self.origin + front;

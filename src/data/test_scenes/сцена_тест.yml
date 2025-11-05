@@ -1,0 +1,96 @@
+objects:
+  - object:
+      path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+      texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+      normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+      kd: [1.0, 1.0, 1.0]
+      ks: [0.0, 0.0, 0.0]
+      kt: [0.0, 0.0, 0.0]
+      color: [192, 192, 192]
+      luminosity: 50
+      translation: [0.0, 0.0, 0.0]
+      rotation: [0.0, 0.0, 0.0]
+      scale: [1.0, 1.0, 1.0]
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+        kd: [1.0, 1.0, 1.0]
+        ks: [0.0, 0.0, 0.0]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [2.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+        kd: [1.0, 1.0, 1.0]
+        ks: [0.0, 0.0, 0.0]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [4.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+        kd: [1.0, 1.0, 1.0]
+        ks: [0.0, 0.0, 0.0]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [0.0, -4.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+        kd: [1.0, 1.0, 1.0]
+        ks: [0.0, 0.0, 0.0]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [0.0, 4.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/wood.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/wood_normals.jpg
+        kd: [1.0, 1.0, 1.0]
+        ks: [0.0, 0.0, 0.0]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [2.0, 2.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+cameras:
+  - camera:
+      fov: 39.0
+      yaw: -40.0
+      pitch: 30.0
+      origin: [8.73, -7.01, 5.24]
+      target: [9.35, -7.74, 5.53]
+
+lights:
+  - light:
+      position: [4.07, -1.0, 3.9]
+      color: [255, 255, 255]
+      intensity: 0.8
+
+lights_props:
+  back_color: [255, 255, 255]
+  back_intensity: 0.01
+  back_const: 0.2

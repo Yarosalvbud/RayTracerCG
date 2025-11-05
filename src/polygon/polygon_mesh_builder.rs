@@ -1,6 +1,6 @@
 use crate::polygon::Polygon;
 use crate::polygon::polygon_mesh::PolygonMesh;
-use crate::polygon::file_reader::loading_stl_model;
+use crate::polygon::file_reader::{loading_obj_data};
 use crate::texture::Texture;
 use crate::ui::errors::UiError;
 
@@ -18,7 +18,7 @@ impl PolygonMeshBuilder {
 
     pub fn build_polygons(&mut self, object_path: Option<String>)-> Result<(), UiError>{
         if let Some(object_path) = object_path {
-            let data = loading_stl_model(&object_path)?;
+            let data = loading_obj_data(&object_path)?;
             self.data = data;
         }else {
             return Err(UiError::NoPathError);

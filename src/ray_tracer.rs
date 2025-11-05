@@ -1,13 +1,13 @@
 use crate::camera::FovCamera;
 use crate::light::DistantLight;
+use crate::light::lights::Lights;
 use crate::polygon::RayIntersect;
+use crate::polygon::polygon_mesh::PolygonMesh;
 use crate::polygon::polygon_mesh::polygon_meshes::PolygonMeshes;
 use crate::texture::Texture;
 use egui::{Color32, ColorImage};
 use nalgebra::{Point3, Vector3};
 use rayon::prelude::*;
-use crate::light::lights::Lights;
-use crate::polygon::polygon_mesh::PolygonMesh;
 
 const BIAS: f32 = 1e-4;
 
@@ -108,6 +108,7 @@ impl Ray {
         lights: &Lights,
         image: &mut ColorImage,
         bg_color: Vec<u8>,
+        trace_depth: i32,
     ) {
         let objects = objects.transform_to_world();
 
@@ -151,7 +152,7 @@ impl Ray {
                     ray.differentials.non_norm_direction = dir_world;
                     ray.differentials.d_o = Some(Differentials(Vector3::zeros(), Vector3::zeros()));
 
-                    let (color, _) = ray.cast(&objects, lights, 3, None, bg_color.clone());
+                    let (color, _) = ray.cast(&objects, lights, trace_depth, None, bg_color.clone());
                     let srgb_color = Texture::linear_to_srgb(&color);
 
                     row[x] = Color32::from_rgb(srgb_color[0], srgb_color[1], srgb_color[2]);
@@ -361,7 +362,7 @@ impl Ray {
                     color[0] += object.ks[0] * reflected_color[0];
                     color[1] += object.ks[1] * reflected_color[1];
                     color[2] += object.ks[2] * reflected_color[2];
-                }else{
+                } else {
                     color[0] += object.ks[0] * background_color[0];
                     color[1] += object.ks[1] * background_color[1];
                     color[2] += object.ks[2] * background_color[2];
@@ -381,14 +382,14 @@ impl Ray {
                     color[0] += object.kt[0] * refracted_color[0];
                     color[1] += object.kt[1] * refracted_color[1];
                     color[2] += object.kt[2] * refracted_color[2];
-                }else{
+                } else {
                     color[0] += object.kt[0] * background_color[0];
                     color[1] += object.kt[1] * background_color[1];
                     color[2] += object.kt[2] * background_color[2];
                 }
             }
         }
-        
+
         color
     }
 
@@ -415,7 +416,8 @@ impl Ray {
                 object_color = Texture::srgb_to_linear(&vec![color[0], color[1], color[2]]);
             }
 
-            let mut color = self.secondary_rays(objects, lights, max_depth, &hit, bg_color, &object);
+            let mut color =
+                self.secondary_rays(objects, lights, max_depth, &hit, bg_color, &object);
 
             let mut color_r = 0.0;
             let mut color_g = 0.0;
@@ -433,20 +435,22 @@ impl Ray {
 
                 let diffuse = n.dot(&l).max(0.0) * light.intensity;
                 let specular = r.dot(&s).max(0.0).powi(object.luminosity) * light.intensity;
-                let background = lights.ka * lights.back_intensity;
                 let light_color = Texture::srgb_to_linear(&light.color);
-                let back_light_color = Texture::srgb_to_linear(&lights.back_color);
 
-                color_r += background * back_light_color[0]
-                    + (object_color[0] * object.kd[0] * diffuse * shadow_param[0]
-                        + object.ks[0] * specular * light_color[0] * shadow_param[0]);
-                color_g += background * back_light_color[1]
-                    + (object_color[1] * object.kd[1] * diffuse * shadow_param[1]
-                        + object.ks[1] * specular * light_color[1] * shadow_param[1]);
-                color_b += background * back_light_color[2]
-                    + (object_color[2] * object.kd[2] * diffuse * shadow_param[2]
-                        + object.ks[2] * specular * light_color[2] * shadow_param[2]);
+                color_r += object_color[0] * object.kd[0] * diffuse * shadow_param[0]
+                    + object.ks[0] * specular * light_color[0] * shadow_param[0];
+                color_g += object_color[1] * object.kd[1] * diffuse * shadow_param[1]
+                    + object.ks[1] * specular * light_color[1] * shadow_param[1];
+                color_b += object_color[2] * object.kd[2] * diffuse * shadow_param[2]
+                    + object.ks[2] * specular * light_color[2] * shadow_param[2];
             }
+
+            let background = lights.ka * lights.back_intensity;
+            let back_light_color = Texture::srgb_to_linear(&lights.back_color);
+
+            color_r += background * back_light_color[0];
+            color_g += background * back_light_color[1];
+            color_b += background * back_light_color[2];
 
             if let Some(intersection) = prev_intersection {
                 let d = Ray::intersection_distance(&hit, &intersection);

@@ -1,6 +1,6 @@
 use crate::polygon::Polygon;
-use nalgebra::{Point2, Point3, Vector3};
 use crate::ui::errors::UiError;
+use nalgebra::{Point2, Point3, Vector3};
 
 pub fn loading_stl_model(file_name: &str) -> Result<Vec<Polygon>, UiError> {
     use std::fs::OpenOptions;
@@ -8,21 +8,22 @@ pub fn loading_stl_model(file_name: &str) -> Result<Vec<Polygon>, UiError> {
     if let Err(_) = file {
         return Err(UiError::BadStlError);
     }
-    
+
     let stl = stl_io::read_stl(&mut file.unwrap());
-    
+
     if let Err(_) = stl {
         return Err(UiError::BadStlError);
     }
     let stl = stl.unwrap();
-    
+
     let vertices: Vec<Point3<f32>> = stl
         .vertices
         .iter()
         .map(|v| Point3::new(v[0], v[1], v[2]))
         .collect();
 
-    Ok(stl.faces
+    Ok(stl
+        .faces
         .iter()
         .map(|poly| {
             Polygon::new_with_normals(
@@ -33,41 +34,74 @@ pub fn loading_stl_model(file_name: &str) -> Result<Vec<Polygon>, UiError> {
         .collect())
 }
 
-pub fn loading_uv_obj_data(polygons: &mut Vec<Polygon>, file_name: &str)->Result<(), UiError>{
+pub fn loading_obj_data(file_name: &str) -> Result<Vec<Polygon>, UiError> {
     let input = tobj::load_obj(file_name, &tobj::LoadOptions::default());
-    if let Err(_) =  input {
+    if let Err(_) = input {
         return Err(UiError::BadUvError);
     }
-    
+
     let (models, _) = input.unwrap();
     let mesh = &models[0].mesh;
 
+    let vertices: Vec<Point3<f32>> = mesh
+        .positions
+        .chunks(3)
+        .map(|chunk| Point3::new(chunk[0], chunk[2], chunk[1]))
+        .collect();
+    let normals: Vec<Vector3<f32>> = mesh
+        .normals
+        .chunks(3)
+        .map(|chunk| Vector3::new(chunk[0], chunk[2], chunk[1]))
+        .collect();
+
+    let mut polygons: Vec<Polygon> = mesh
+        .indices
+        .chunks(3)
+        .zip(mesh.normal_indices.chunks(3))
+        .map(|(v_chunk, n_chunk)| {
+            Polygon::new_with_normals(
+                vec![
+                    vertices[v_chunk[2] as usize],
+                    vertices[v_chunk[1] as usize],
+                    vertices[v_chunk[0] as usize],
+                ],
+                normals[n_chunk[0] as usize],
+            )
+        })
+        .collect();
+
     let tex_coords = &mesh.texcoords;
     let tex_coords_indices = &mesh.texcoord_indices;
-        
     let mut to_polygons: Vec<Point2<f32>> = Vec::new();
     let mut polygons_uv: Vec<Vec<Point2<f32>>> = Vec::new();
     let mut to_polygons_idx = 0;
-        
-    for idx in tex_coords_indices.iter(){
-        to_polygons.push(Point2::new(tex_coords[2 * *idx as usize], tex_coords[2 * *idx as usize + 1]));
-            
-        if to_polygons.len() == 3{
+
+    for idx in tex_coords_indices.iter() {
+        to_polygons.push(Point2::new(
+            tex_coords[2 * *idx as usize],
+            tex_coords[2 * *idx as usize + 1],
+        ));
+
+        if to_polygons.len() == 3 {
             if to_polygons_idx >= polygons.len() {
                 return Err(UiError::BadUVError);
             }
-                
+
+            to_polygons.reverse();
             polygons_uv.push(to_polygons.clone());
             to_polygons_idx += 1;
             to_polygons.clear();
         }
     }
-
-    if polygons_uv.len() != polygons.len(){
+    if polygons_uv.len() != polygons.len() {
         return Err(UiError::BadUVError);
-    }else {
-        polygons.iter_mut().zip(polygons_uv).for_each(|(poly, uv)| poly.uv = uv);
+    } else {
+        polygons
+            .iter_mut()
+            .zip(polygons_uv)
+            .for_each(|(poly, uv)| poly.uv = uv);
     }
-    
-    Ok(())
+
+    polygons.iter_mut().for_each(|poly| poly.create_tbn());
+    Ok(polygons)
 }

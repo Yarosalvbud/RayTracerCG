@@ -1,5 +1,4 @@
 pub mod lights;
-
 use nalgebra::{Point3, Vector3};
 
 #[derive(Clone, Debug)]
@@ -20,6 +19,14 @@ impl Default for DistantLight{
 }
 
 impl DistantLight{
+
+    pub fn new(origin: Point3<f32>, intensity: f32, color: Vec<u8>) -> DistantLight{
+        DistantLight{
+            origin,
+            intensity,
+            color
+        }
+    }
     pub fn vector_to_light(&self, intersection: &Point3<f32>)->Vector3<f32>{
         (self.origin - intersection).normalize()
     }

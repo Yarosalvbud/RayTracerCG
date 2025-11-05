@@ -22,6 +22,15 @@ impl Default for Lights{
 }
 
 impl Lights{
+    pub fn new(back_intensity: f32, ka: f32, back_color: Vec<u8>, lights: Vec<DistantLight>) -> Self {
+        Lights{
+            back_intensity,
+            ka,
+            back_color,
+            lights
+        }
+    }
+    
     pub fn translate(&mut self, translation: &Vector3<f32>, id: usize)-> Result<(), UiError>{
         if id >= self.lights.len(){
             return Err(UiError::ObjectNotFoundError);
@@ -76,5 +85,9 @@ impl Lights{
         }
 
         positions
+    }
+
+    pub fn add(&mut self, light: DistantLight){
+        self.lights.push(light);
     }
 }

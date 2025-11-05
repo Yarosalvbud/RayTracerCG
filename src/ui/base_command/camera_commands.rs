@@ -105,3 +105,39 @@ impl<'a> FovCameraTarget<'a> {
         FovCameraTarget{target, controller}
     }
 }
+
+pub struct ChangeActiveCamera<'a>{
+    id: usize,
+    controller: &'a mut Controller,
+}
+
+impl<'a> Command for ChangeActiveCamera<'a> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.set_active_camera(self.id)?;
+        Ok(())
+    }
+}
+
+impl<'a> ChangeActiveCamera<'a> {
+    pub fn new(id: usize, controller: &'a mut Controller) -> ChangeActiveCamera<'a> {
+        ChangeActiveCamera{id, controller}
+    }
+}
+
+pub struct AddCamera<'a>{
+    controller: &'a mut Controller,
+}
+
+impl<'a> Command for AddCamera<'a> {
+    fn execute(&mut self) -> Result<(), UiError> {
+        self.controller.add_camera();
+        
+        Ok(())
+    }
+}
+
+impl<'a> AddCamera<'a> {
+    pub fn new(controller: &'a mut Controller) -> AddCamera<'a> {
+        AddCamera{controller}
+    }
+}

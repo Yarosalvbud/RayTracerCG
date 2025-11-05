@@ -71,7 +71,6 @@ impl Polygon {
 
         let square = u.cross(&v).norm() / 2.0;
         let normal_full = square * normal;
-
         Polygon {
             vertexes,
             normal: normal_full,
@@ -111,8 +110,7 @@ impl Polygon {
             f * (delta_uv_second.y * edge_first.x - delta_uv_first.y * edge_second.x),
             f * (delta_uv_second.y * edge_first.y - delta_uv_first.y * edge_second.y),
             f * (delta_uv_second.y * edge_first.z - delta_uv_first.y * edge_second.z),
-        )
-        .normalize();
+        ).normalize();
         tangent = (tangent - tangent.dot(&normal) * normal).normalize();
 
         let bitangent = normal.cross(&tangent).normalize();
@@ -127,7 +125,6 @@ impl Polygon {
             (normal[1] as f32 / 255.0) * 2.0 - 1.0,
             (normal[2] as f32 / 255.0) * 2.0 - 1.0,
         ).normalize();
-
         (self.tbn.as_ref() * poly_normal).normalize()
     }
 

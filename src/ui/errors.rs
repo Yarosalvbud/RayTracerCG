@@ -32,4 +32,12 @@ pub enum UiError{
     ColorPropertiesError,
     #[error("Константа отражения объекта - целое положительное число")]
     LuminosityError,
+    #[error("Фоновая константа не может быть больше единицы")]
+    BackConstError,
+    #[error("Диффузная, зеркальная, прозрачная составляющие не могут быть меньше нуля")]
+    ColorPropsSignError,
+    #[error("Данной камеры нет на сцене")]
+    CameraNotPresentedError,
+    #[error("Чтобы увидеть сцену, на нее необходимо добавить камеру")]
+    RenderError,
 }

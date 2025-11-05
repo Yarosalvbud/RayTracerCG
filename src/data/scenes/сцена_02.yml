@@ -1,0 +1,110 @@
+objects:
+  - object:
+      path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+      texture: null
+      normal_map: null
+      kd: [ 0.0, 0.0, 0.0 ]
+      ks: [ 1.0, 1.0, 1.0 ]
+      kt: [ 0.0, 0.0, 0.0 ]
+      color: [ 192, 192, 192 ]
+      luminosity: 50
+      translation: [ 0.0, 0.0, 0.0 ]
+      rotation: [ 0.0, 0.0, 0.0 ]
+      scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+      path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+      texture: null
+      normal_map: null
+      kd: [ 0.0, 0.0, 0.0 ]
+      ks: [ 1.0, 1.0, 1.0 ]
+      kt: [ 0.0, 0.0, 0.0 ]
+      color: [ 192, 192, 192 ]
+      luminosity: 50
+      translation: [ 0.0, -5.0, 5.0 ]
+      rotation: [ 270.0, 0.0, 0.0 ]
+      scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+      path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+      texture: null
+      normal_map: null
+      kd: [ 0.0, 0.0, 0.0 ]
+      ks: [ 1.0, 1.0, 1.0 ]
+      kt: [ 0.0, 0.0, 0.0 ]
+      color: [ 192, 192, 192 ]
+      luminosity: 50
+      translation: [ -5.0, 0.0, 5.0 ]
+      rotation: [ 0.0, 90.0, 0.0 ]
+      scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+        texture: null
+        normal_map: null
+        kd: [ 0.0, 0.0, 0.0 ]
+        ks: [ 1.0, 1.0, 1.0 ]
+        kt: [ 0.0, 0.0, 0.0 ]
+        color: [ 192, 192, 192 ]
+        luminosity: 50
+        translation: [ 0.0, 5.0, 5.0 ]
+        rotation: [ 90.0, 0.0, 0.0 ]
+        scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+        texture: null
+        normal_map: null
+        kd: [ 0.0, 0.0, 0.0 ]
+        ks: [ 1.0, 1.0, 1.0 ]
+        kt: [ 0.0, 0.0, 0.0 ]
+        color: [ 192, 192, 192 ]
+        luminosity: 50
+        translation: [ 0.0, 0.0, 5.0 ]
+        rotation: [ 0.0, 180.0, 0.0 ]
+        scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/плоскость.obj
+        texture: null
+        normal_map: null
+        kd: [ 0.0, 0.0, 0.0 ]
+        ks: [ 1.0, 1.0, 1.0 ]
+        kt: [ 0.0, 0.0, 0.0 ]
+        color: [ 192, 192, 192 ]
+        luminosity: 50
+        translation: [ 5.0, 0.0, 5.0 ]
+        rotation: [ 0.0, 90.0, 0.0 ]
+        scale: [ 0.5, 0.5, 0.5 ]
+
+  - object:
+        path: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/uv_unwrap/икосаэдр.obj
+        texture: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/textures/green.jpg
+        normal_map: /Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/normal_maps/green_normals.jpg
+        kd: [0.95, 0.95, 0.95]
+        ks: [0.05, 0.05, 0.05]
+        kt: [0.0, 0.0, 0.0]
+        color: [192, 192, 192]
+        luminosity: 50
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+
+cameras:
+  - camera:
+      fov: 50.0
+      yaw: -3.0
+      pitch: 25.0
+      origin: [4.06, 0.42, 2.82]
+      target: [4.96, 0.38, 3.25]
+
+lights:
+  - light:
+      position: [2.0, 2.0, 3.9]
+      color: [255, 255, 255]
+      intensity: 0.8
+
+lights_props:
+  back_color: [255, 255, 255]
+  back_intensity: 0.01
+  back_const: 0.2

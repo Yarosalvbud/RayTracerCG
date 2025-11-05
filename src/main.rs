@@ -5,6 +5,10 @@ mod ray_tracer;
 pub mod texture;
 mod ui;
 mod controller;
+mod scene;
+mod measures;
+
+use crate::measures::{measure_time, measure_time_polygons};
 use crate::ui::App;
 
 fn main() {
@@ -28,4 +32,6 @@ fn main() {
             Ok(Box::new(App::default()))
         }),
     ).expect("Ошибка при запуске");
+    //measure_time("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/scenes/сцена_02.yml");
+    //measure_time_polygons("/Users/aroslavbudancev/Documents/Projects/RayTracerCG/src/data/test_scenes/сцена_тест.yml");
 }

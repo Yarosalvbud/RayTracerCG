@@ -367,7 +367,6 @@ impl Texture {
             srgb_color.push((srgb.clamp(0.0, 1.0) * 255.0).round() as u8);
         }
 
-
         srgb_color
     }
 }

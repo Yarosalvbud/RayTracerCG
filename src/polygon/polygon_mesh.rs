@@ -4,8 +4,6 @@ use crate::polygon::{Polygon, RayIntersect};
 use crate::ray_tracer::Ray;
 use crate::texture::Texture;
 use nalgebra::{Matrix4, Point3, Vector3};
-use crate::polygon::file_reader::loading_uv_obj_data;
-use crate::ui::errors::UiError;
 
 #[derive(Debug, Clone)]
 struct Sphere {
@@ -126,10 +124,6 @@ impl PolygonMesh {
     
     pub fn set_texture(&mut self, texture: Option<Texture>) {
         self.texture = texture;
-    }
-
-    pub fn load_uv(&mut self, uv: &str)->Result<(), UiError>{
-        loading_uv_obj_data(&mut self.polygons, uv)
     }
     
     pub fn set_kd(&mut self, kd: Vec<f32>) {
