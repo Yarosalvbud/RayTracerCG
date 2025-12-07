@@ -15,14 +15,17 @@ pub struct FovCamera {
 
 impl Default for FovCamera {
     fn default() -> FovCamera {
-        FovCamera {
-            origin: Point3::new(0.0, 0.0, 0.0),
-            target: Point3::new(0.0, 1.0, 0.0),
+        let mut cam: FovCamera = FovCamera {
+            origin: Point3::new(8.73, -7.01, 5.24),
+            target: Point3::new(9.35, -7.74, 5.53),
             world_up: Vector3::new(0.0, 0.0, 1.0),
-            yaw: 0.0,
-            pitch: 0.0,
+            yaw: -40.0,
+            pitch: 30.0,
             fov: 39.0,
-        }
+        };
+        cam.rotate(&Vector3::zeros());
+
+        cam
     }
 }
 

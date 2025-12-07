@@ -40,4 +40,6 @@ pub enum UiError{
     CameraNotPresentedError,
     #[error("Чтобы увидеть сцену, на нее необходимо добавить камеру")]
     RenderError,
+    #[error("Нельзя масштабировать на данный коэффициент")]
+    ScaleError,
 }

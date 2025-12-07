@@ -50,6 +50,10 @@ impl Controller {
             return Err(UiError::ObjectNotFoundError);
         }
 
+        if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
+            return Err(UiError::ScaleError);
+        }
+
         self.scene.meshes.scale(scale, id);
         Ok(())
     }
